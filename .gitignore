@@ -1,0 +1,5 @@
+# Environment variables
+.env
+
+# Service principal credentials
+azure-connection/sp-credentials.json
