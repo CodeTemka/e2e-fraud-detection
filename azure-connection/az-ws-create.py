@@ -33,4 +33,10 @@ ws = Workspace(
     tags=dict(purpose="demo"),
 )
 # Use MLClient to connect to the subscription and resource group and create the workspace.
-ml_client.workspaces.begin_create_or_update(ws)
+
+try:
+    ws = ml_client.workspaces.get(name=workspace_name)
+    print(f"Workspace {workspace_name} already exists.")
+except Exception as e:
+    print(f"Creating workspace {workspace_name}...")
+    ml_client.workspaces.begin_create(ws)
