@@ -1,4 +1,6 @@
 # downloading dataset from kaggle using kaggle api, not manually
+# NOTE: You can download data to a Azure VM, which can be faster compared to local machine, and it doesn't upload file to local disk.
+
 
 import os
 import json
