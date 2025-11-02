@@ -17,7 +17,7 @@ ml_client = MLClient(
     workspace_name=workspace_name,
 )
 
-data_input = Input(type=AssetTypes.MLTABLE, path='./train_data')
+data_input = Input(type=AssetTypes.MLTABLE, path="azureml:mltable_creditcard_data:1")
 
 classification_job = automl.classification(
     compute="automated-ml-cluster",
@@ -34,7 +34,7 @@ classification_job.set_limits(
     timeout_minutes=600,
     trial_timeout_minutes=30,
     max_trials=30,
-    enable_early_stopping=True,
+    enable_early_termination=True,
     max_concurrent_trials=3
 )
 

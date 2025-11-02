@@ -30,7 +30,7 @@ except Exception as e:
         name=cluster_name,
         type="amlcompute",
         size='Standard_E8s_v3',
-        location='easasia',
+        location='eastasia',
         min_instances=0,
         max_instances=3,
         idle_time_before_scale_down=100

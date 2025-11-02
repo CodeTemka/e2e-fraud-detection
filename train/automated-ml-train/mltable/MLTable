@@ -1,5 +1,5 @@
 paths:
-- file: ..\..\..\data\creditcard.csv
+- file: azureml://subscriptions/aa4acb09-3611-4169-8504-1e68ad04a40f/resourcegroups/e2e-fraud-detection/workspaces/e2e-fraud-detection-ws/datastores/workspaceblobstore/paths/LocalUpload/715bf0709a532bd92bf394cd57dc8c4cbf503faf27142ae8ef10119829a672a8/creditcard.csv
 transformations:
 - read_delimited:
     delimiter: ','
