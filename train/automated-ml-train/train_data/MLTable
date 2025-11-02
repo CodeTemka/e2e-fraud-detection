@@ -1,0 +1,14 @@
+paths:
+- file: ..\..\..\data\creditcard.csv
+transformations:
+- read_delimited:
+    delimiter: ','
+    empty_as_string: false
+    encoding: utf8
+    header: all_files_same_headers
+    include_path_column: false
+    infer_column_types: true
+    partition_size: 20971520
+    path_column: Path
+    support_multi_line: false
+type: mltable

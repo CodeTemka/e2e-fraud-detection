@@ -1,0 +1,8 @@
+In Azure ML, Automl feature picks an algorithm and hyperparameters for you and generates a model ready for deployment.
+You don't have to specifiy which type of model to choose and which hyperparameters to use for that model.
+Automl job finds the best model type and hyperparameters for you, once you provide your data.
+For tabular data, Automl accepts mltable type.
+
+Requirements for loading data into an MLTable:
+1.Data must be in tabular form.
+2.The value to predict, target column, must be in the data.
