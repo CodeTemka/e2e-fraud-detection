@@ -1,4 +1,3 @@
-from azure.ai.ml.entities import AmlCompute
 from azure.identity import DefaultAzureCredential
 from azure.ai.ml import MLClient
 from dotenv import load_dotenv
