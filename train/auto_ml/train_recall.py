@@ -7,13 +7,14 @@ data_input = Input(type=AssetTypes.MLTABLE, path="azureml:mltable_creditcard_dat
 
 classification_job = automl.classification(
     compute="automated-ml-cluster",
-    experiment_name="automated-ml-classification-experiment",
+    experiment_name="automated-ml-classification-recall-experiment",
     training_data=data_input,
     target_column_name="Class",
-    primary_metric="AUC_weighted",
-    n_cross_validations=10,
+    primary_metric="Recall_weighted",
+    n_cross_validations=20,
     enable_model_explainability=True,
-    tags={"project": "automated-ml-classification"}
+    tags={"project": "automated-ml-classification",
+          "metric": "recall"}
 )
 
 classification_job.set_limits(
