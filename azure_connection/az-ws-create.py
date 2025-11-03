@@ -2,7 +2,9 @@ from azure.ai.ml import MLClient
 from azure.identity import ClientSecretCredential
 from azure.ai.ml.entities import Workspace
 import json
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 # Load SP credentials
 with open("sp-credentials.json") as f:
@@ -14,10 +16,10 @@ credential = ClientSecretCredential(
     client_secret=sp_data["clientSecret"]
 )
 
-subscription_id = sp_data["subscriptionId"]
-resource_group = "e2e-fraud-detection"
-workspace_name = "e2e-fraud-detection-ws"
-location = "eastasia"
+subscription_id = os.getenv("SUBSCRIPTION_ID")
+resource_group = os.getenv("RESOURCE_GROUP")
+workspace_name = os.getenv("WORKSPACE_NAME")
+location = os.getenv("LOCATION")
 
 ml_client = MLClient(
     credential=credential,

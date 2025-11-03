@@ -11,7 +11,7 @@ import json
 load_dotenv()
 
 subscription_id = os.getenv("SUBSCRIPTION_ID")
-resource_group = "e2e-fraud-detection"
+resource_group = os.getenv("RESOURCE_GROUP")
 sp_name = 'e2e-fraud-detection-sp'
 role = 'Contributor'
 output_file = 'sp-credentials.json'
