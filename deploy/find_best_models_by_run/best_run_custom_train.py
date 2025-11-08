@@ -5,7 +5,7 @@ import pandas as pd
 from mlflow.entities import ViewType
 
 # Assume this setup module is necessary for connecting to Azure ML
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../..")))
 from azure_connection.ml_client_setup import ml_client
 
 

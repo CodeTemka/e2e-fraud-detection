@@ -6,7 +6,7 @@ from mlflow.entities import ViewType
 from typing import Set, Dict, List, Any # Using Any for the nested metric value
 
 # Assume this setup module is necessary for connecting to Azure ML
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../..")))
 # We need to ensure the ml_client import works correctly based on your setup
 from azure_connection.ml_client_setup import ml_client
 
