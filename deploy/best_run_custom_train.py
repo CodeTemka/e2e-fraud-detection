@@ -51,7 +51,10 @@ def get_best_runs_by_metric():
         # Check if the metric column contains numeric data and is not all NaN
         if pd.api.types.is_numeric_dtype(df[metric]) and not df[metric].empty and df[metric].any():
             best_row = df.loc[df[metric].idxmax()]
-            best_runs[metric] = best_row[run_id_col]
+            best_runs[metric] = {   # initialize nested dict
+                'run_id': best_row[run_id_col],
+                'metric': best_row[metric]
+            }
             
             # Print the result only when executed as the main script (see below)
             # print(f"Best run for {metric}: Run ID = {best_row[run_id_col]}, Value = {best_row[metric]}")

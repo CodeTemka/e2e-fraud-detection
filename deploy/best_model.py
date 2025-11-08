@@ -13,5 +13,6 @@ from best_run_auto_ml import auto_ml_best_runs
 from best_run_custom_train import custom_train_best_runs
 from azure_connection.ml_client_setup import ml_client
 
-best_models_runs_id = set(list(auto_ml_best_runs.values()) + list(custom_train_best_runs.values()))
+best_models_runs_id = list(set(list(info['run_id'] for info in auto_ml_best_runs.values()) + list(info['run_id'] for info in custom_train_best_runs.values())))
 print(best_models_runs_id)
+
