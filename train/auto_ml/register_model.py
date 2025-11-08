@@ -31,7 +31,7 @@ for job_name, job in auto_ml_job().items():
     # Get best trial run ID
     best_child_run_id = mlflow_parent_run.data.tags["automl_best_child_run_id"]
 
-    # ✅ Directly register using the job path (no need to call jobs.get)
+    # Directly register using the job path (no need to call jobs.get)
     model_name = f"{job.experiment_name.replace(' ', '_').lower()}_{job_name}_model"
     registered_model = ml_client.models.create_or_update(
         Model(

@@ -13,18 +13,18 @@ classification_job = automl.classification(
     experiment_name="automated-ml-classification-recall-experiment",
     training_data=data_input,
     target_column_name="Class",
-    primary_metric=ClassificationPrimaryMetrics.NORM_MACRO_RECALL,
+    primary_metric=ClassificationPrimaryMetrics.ACCURACY,
     n_cross_validations=5,
     enable_model_explainability=True,
     tags={"project": "automated-ml-classification",
           "model": "LightGBM",
-          "metric": "Normalized Macro Recall"}
+          "metric": "Accuracy"}
 )
 
 classification_job.set_limits(
     timeout_minutes=600,
     trial_timeout_minutes=60,
-    max_trials=30,
+    max_trials=100,
     max_concurrent_trials=3
 )
 
