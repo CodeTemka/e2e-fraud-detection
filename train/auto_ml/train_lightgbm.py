@@ -2,11 +2,12 @@ from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml import automl, Input
 
 from azure_connection.ml_client_setup import ml_client
+import uuid
 
 data_input = Input(type=AssetTypes.MLTABLE, path="azureml:mltable_creditcard_data:1")
 
 classification_job = automl.classification(
-    name='lightgbm-only-classification-job',
+    name = f"lightgbm-only-classification-job-{str(uuid.uuid4())[:8]}",
     compute="automated-ml-cluster",
     experiment_name="automated-ml-classification-recall-experiment",
     training_data=data_input,
