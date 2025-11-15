@@ -140,49 +140,28 @@ cd e2e-fraud-detection
 ### 2. Create a Virtual Environment
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate      
-# or
-source .venv/bin/activate
+conda env create -f environment.yml
+conda activate "$(grep '^name:' environment.yml | awk '{print $2}')"
 ```
 
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Azure ML
+### 3. Configure Azure ML
 
 Update values in:
 
 ```
-azure_connection/config.json
+azure_connection/sp-credentials.json
 ```
-
----
-
-## 🧪 Training
-
-### AutoML Training
-
-```bash
-python -m train.auto_ml.train_recall
-```
-
-### LightGBM Training
-
-```bash
-python train/custom_train/train_script.py
-```
-
----
 
 ## 📈 Currently deployed model metrics
 
 https://ml.azure.com/experiments/id/7fd82d29-73d4-418d-b094-61c33c36c153/runs/lightgbm-only-classification-job-f8330f03_29?wsid=%2Fsubscriptions%2Faa4acb09-3611-4169-8504-1e68ad04a40f%2FresourceGroups%2Fe2e-fraud-detection%2Fproviders%2FMicrosoft.MachineLearningServices%2Fworkspaces%2Fe2e-fraud-detection-ws&tid=2a4097cb-12db-4fa9-bc97-72c7c0027cae#metrics
 
 ---
+
+## 🤗 Deployed app on HuggingFace
+
+app repository: https://github.com/CodeTemka/Credit-Card-Fraud-Detection
+app space on HuggingFace: https://huggingface.co/spaces/Temka04/Credit-Card-Fraud-Detection
 
 ## 🧾 Example Inference Request
 
