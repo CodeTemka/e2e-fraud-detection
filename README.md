@@ -160,10 +160,10 @@ https://ml.azure.com/experiments/id/7fd82d29-73d4-418d-b094-61c33c36c153/runs/li
 
 ## 🤗 Deployed app on HuggingFace
 
-app repository: https://github.com/CodeTemka/Credit-Card-Fraud-Detection
-app space on HuggingFace: https://huggingface.co/spaces/Temka04/Credit-Card-Fraud-Detection
+* app repository: https://github.com/CodeTemka/Credit-Card-Fraud-Detection
+* app space on HuggingFace: https://huggingface.co/spaces/Temka04/Credit-Card-Fraud-Detection
 
-## 🧾 Example Inference Request
+## 🧾 Example Inference sRequest
 
 ```json
 {
