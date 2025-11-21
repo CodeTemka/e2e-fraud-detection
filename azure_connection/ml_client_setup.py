@@ -1,17 +1,5 @@
-from azure.identity import DefaultAzureCredential
-from azure.ai.ml import MLClient
-from dotenv import load_dotenv
-import os
+"""Compatibility wrapper for creating an Azure ML client."""
 
-load_dotenv()
+from fraud_detection.azure.client import create_ml_client
 
-subscription_id = os.getenv("SUBSCRIPTION_ID")
-resource_group = os.getenv("RESOURCE_GROUP")
-workspace_name = os.getenv("WORKSPACE_NAME")
-
-ml_client = MLClient(
-    credential=DefaultAzureCredential(),
-    subscription_id=subscription_id,
-    resource_group_name=resource_group,
-    workspace_name=workspace_name,
-)
+ml_client = create_ml_client()

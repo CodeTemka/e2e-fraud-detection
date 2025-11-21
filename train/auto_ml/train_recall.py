@@ -1,28 +1,35 @@
-from azure.ai.ml.constants import AssetTypes
-from azure.ai.ml import automl, Input
+"""Submit an Azure AutoML classification job optimized for recall."""
+from __future__ import annotations
 
-from azure_connection.ml_client_setup import ml_client
+import argparse
 
-data_input = Input(type=AssetTypes.MLTABLE, path="azureml:mltable_creditcard_data:1")
+from fraud_detection.training.automl import build_automl_job, submit_automl_job
 
-classification_job = automl.classification(
-    compute="automated-ml-cluster",
-    experiment_name="automated-ml-classification-recall-experiment",
-    training_data=data_input,
-    target_column_name="Class",
-    primary_metric="norm_macro_recall",
-    n_cross_validations=20,
-    enable_model_explainability=True,
-    tags={"project": "automated-ml-classification",
-          "metric": "recall"}
-)
 
-classification_job.set_limits(
-    timeout_minutes=600,
-    trial_timeout_minutes=30,
-    max_trials=30,
-    enable_early_termination=True,
-    max_concurrent_trials=3
-)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Launch an Azure AutoML job")
+    parser.add_argument("--training-data", required=True, help="MLTable asset path")
+    parser.add_argument("--compute", default="automated-ml-cluster", help="Azure ML compute target")
+    parser.add_argument(
+        "--primary-metric", default="norm_macro_recall", help="Primary metric to optimize"
+    )
+    parser.add_argument("--experiment-name", default="automl-classification-recall")
+    parser.add_argument("--target-column", default="Class")
+    return parser.parse_args()
 
-classification_returned_job = ml_client.jobs.create_or_update(classification_job)
+
+def main() -> None:
+    args = parse_args()
+    job = build_automl_job(
+        training_data=args.training_data,
+        target_column=args.target_column,
+        experiment_name=args.experiment_name,
+        compute=args.compute,
+        primary_metric=args.primary_metric,
+    )
+    created_job = submit_automl_job(job)
+    print(f"Submitted AutoML job: {created_job.name}")
+
+
+if __name__ == "__main__":
+    main()

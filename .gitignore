@@ -1,5 +1,34 @@
 # Environment variables
 .env
 
-# json credentials
+# Credentials
 *.json
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+.env*/
+venv/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebooks and data
+.ipynb_checkpoints/
+artifacts/
+
+# VS Code and other editors
+.vscode/
+*.code-workspace
