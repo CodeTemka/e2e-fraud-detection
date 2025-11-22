@@ -1,7 +1,9 @@
 from azure.ai.ml.entities import Data
 from azure.ai.ml.constants import AssetTypes
 
-from azure_connection.ml_client_setup import ml_client
+from fraud_detection.azure.client import get_ml_client
+
+ml_client = get_ml_client()
 
 data_name = "creditcard-data"
 version = "1"

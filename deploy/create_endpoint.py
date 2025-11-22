@@ -1,12 +1,16 @@
 import os
 import sys
+import uuid
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-from azure_connection.ml_client_setup import ml_client
+
+from fraud_detection.azure.client import get_ml_client
 from azure.ai.ml.entities import (
     ManagedOnlineEndpoint,
     ManagedOnlineDeployment,
 )
-import uuid
+
+ml_client = get_ml_client()
 
 online_endpoint_name = "fraud-detection-" + str(uuid.uuid4())[:4]
 
