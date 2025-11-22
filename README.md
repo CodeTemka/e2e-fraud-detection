@@ -62,3 +62,6 @@ pytest
 - The CLI relies on Azure credentials available to `DefaultAzureCredential` (environment variables,
   managed identity, or developer login).
 - Large raw datasets should stay out of version control; the `.gitignore` excludes common artifacts.
+- `.env.example` is a safe template checked into Git so collaborators know which variables to set.
+  Copy it to `.env` locally (which is ignored by Git) and fill in your real subscription, resource
+  group, workspace, compute, and dataset names—personal tokens stay on your machine only.
