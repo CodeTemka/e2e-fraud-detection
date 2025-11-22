@@ -1,17 +1,9 @@
-from azure.identity import DefaultAzureCredential
-from azure.ai.ml import MLClient
-from dotenv import load_dotenv
-import os
+"""Backward compatible wrapper for creating an Azure ML client.
 
-load_dotenv()
+Prefer using :mod:`fraud_detection.azure.client` directly. This module exists
+for legacy scripts that still import ``azure_connection.ml_client_setup``.
+"""
+from fraud_detection.azure.client import get_ml_client  # noqa: F401
+from fraud_detection.azure.client import get_ml_client as ml_client  # type: ignore
 
-subscription_id = os.getenv("SUBSCRIPTION_ID")
-resource_group = os.getenv("RESOURCE_GROUP")
-workspace_name = os.getenv("WORKSPACE_NAME")
-
-ml_client = MLClient(
-    credential=DefaultAzureCredential(),
-    subscription_id=subscription_id,
-    resource_group_name=resource_group,
-    workspace_name=workspace_name,
-)
+__all__ = ["get_ml_client", "ml_client"]
