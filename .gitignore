@@ -1,5 +1,38 @@
-# Environment variables
+# Environment variables and secrets
 .env
+sp_credentials.json
 
-# json credentials
-*.json
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env*/
+.venv/
+venv/
+
+# Distribution / packaging
+.Python
+build/
+dist/
+.eggs/
+*.egg-info
+
+# Testing and coverage
+.pytest_cache/
+.coverage*
+hypothesis/
+
+# Jupyter
+.ipynb_checkpoints
+
+# IDEs and tooling
+.idea/
+.vscode/
+*.code-workspace
+
+# Data & artifacts
+mlruns/
+outputs/
+logs/

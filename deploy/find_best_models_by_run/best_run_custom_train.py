@@ -6,7 +6,9 @@ from mlflow.entities import ViewType
 
 # Assume this setup module is necessary for connecting to Azure ML
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../..")))
-from azure_connection.ml_client_setup import ml_client
+from fraud_detection.azure.client import get_ml_client
+
+ml_client = get_ml_client()
 
 
 def get_best_runs_by_metric():
