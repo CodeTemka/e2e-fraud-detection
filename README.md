@@ -37,6 +37,11 @@ pip install -e .[dev]
 ```
 
 ## 🚀 Usage
+Register the local credit card dataset as an Azure ML data asset (defaults to `data/creditcard.csv`):
+```bash
+python scripts/register_data_asset.py register
+```
+
 Submit an AutoML job (recall-optimized by default):
 ```bash
 fraud-cli submit-automl --metric recall
