@@ -12,6 +12,22 @@ from dotenv import load_dotenv
 def main():
     load_dotenv()
 
+    result = subprocess.run(
+        ["where", "az"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    az_path = next(
+        (p.strip() for p in result.stdout.splitlines() if p.strip().lower().endswith(".cmd")),
+        None
+    )
+    if az_path is None:
+        raise RuntimeError("Azure CLI (az.cmd) not found on this system.")
+
+    print("Using AZ:", az_path)
+
+
     def require_env_var(var_name: str) -> str:
         value = os.getenv(var_name)
         if not value:
@@ -23,10 +39,10 @@ def main():
         resource_group_name = require_env_var("RESOURCE_GROUP")
         location = require_env_var("LOCATION")
 
-        subprocess.run(["az", "login"], check=True)
+        subprocess.run([az_path, "login"], check=True)
 
         # 1. Check if the resource group exists
-        show_cmd = ["az", "group", "show", "--name", resource_group_name]
+        show_cmd = [az_path, "group", "show", "--name", resource_group_name]
 
         result = subprocess.run(
             show_cmd,
@@ -37,7 +53,7 @@ def main():
         # 2. If show failed (resource group doesn't exist), create it
         if result.returncode != 0:
             create_cmd = [
-                "az", "group", "create",
+                az_path, "group", "create",
                 "--name", resource_group_name,
                 "--location", location,
                 "--output", "json",
@@ -67,7 +83,7 @@ def main():
 
         def sp_exists(sp_name):
             cmd = [
-                "az", "ad", "sp", "list",
+                az_path, "ad", "sp", "list",
                 "--display-name", sp_name,
                 "--query", "[].appId",
                 "-o", "tsv",
@@ -82,7 +98,7 @@ def main():
 
         print(f"Creating service principal '{sp_name}'...")
         cmd = [
-            "az", "ad", "sp", "create-for-rbac",
+            az_path, "ad", "sp", "create-for-rbac",
             "--name", sp_name,
             "--role", role,
             "--scopes", f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}",
