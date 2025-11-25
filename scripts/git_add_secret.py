@@ -4,13 +4,14 @@ from nacl import encoding, public
 from dotenv import load_dotenv
 import os
 import json
+from pathlib import Path
 
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 OWNER = os.getenv('GITHUB_OWNER')
 REPO = os.getenv('GITHUB_REPO')
-SECRETS = 'sp-credentials.json'
+SECRETS = Path('json') / 'sp_credentials.json'
 
 with open(SECRETS, 'r') as f:
     secrets = json.load(f)
@@ -50,8 +51,8 @@ for name, value in secrets.items():
 
     if put_resp.status_code in (201, 204):
         if secret_exists(name):
-            print(f"♻ Secret '{name}' updated successfully.")
+            print(f"Secret '{name}' updated successfully.")
         else:
-            print(f"✓ Secret '{name}' created successfully.")
+            print(f"Secret '{name}' created successfully.")
     else:
-        print(f"✗ Failed to upload {name}: {put_resp.status_code} - {put_resp.text}")
+        print(f"Failed to upload {name}: {put_resp.status_code} - {put_resp.text}")

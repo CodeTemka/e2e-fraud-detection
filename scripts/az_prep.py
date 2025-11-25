@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Workspace
@@ -79,7 +80,8 @@ def main():
         resource_group = require_env_var("RESOURCE_GROUP")
         sp_name = "e2e-fraud-detection-sp"
         role = "Contributor"
-        output_file = "sp_credentials.json"
+        output_dir = Path("json")
+        output_file = output_dir / "sp_credentials.json"
 
         def sp_exists(sp_name):
             cmd = [
@@ -105,7 +107,7 @@ def main():
             "--sdk-auth",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
+        output_dir.mkdir(parents=True, exist_ok=True)
         # Save SP credentials to JSON
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(result.stdout)
