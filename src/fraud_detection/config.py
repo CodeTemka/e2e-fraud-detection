@@ -23,12 +23,36 @@ class Settings(BaseSettings):
         alias="AML_DATASET",
         description="Default MLTable asset for training jobs.",
     )
-    github_token: str = Field(..., alias="GITHUB_TOKEN")
-    github_owner: str = Field(..., alias="GITHUB_OWNER")
-    github_repo: str = Field(..., alias="GITHUB_REPO")
-    kaggle_username: str = Field(..., alias="KAGGLE_USERNAME")
-    kaggle_key: str = Field(..., alias="KAGGLE_KEY")
-    location: str = Field(..., alias="LOCATION")
+    github_token: str | None = Field(
+        None,
+        alias="GITHUB_TOKEN",
+        description="Optional GitHub token used by helper scripts.",
+    )
+    github_owner: str | None = Field(
+        None,
+        alias="GITHUB_OWNER",
+        description="Optional GitHub repository owner for automation scripts.",
+    )
+    github_repo: str | None = Field(
+        None,
+        alias="GITHUB_REPO",
+        description="Optional GitHub repository name for automation scripts.",
+    )
+    kaggle_username: str | None = Field(
+        None,
+        alias="KAGGLE_USERNAME",
+        description="Optional Kaggle username when downloading datasets.",
+    )
+    kaggle_key: str | None = Field(
+        None,
+        alias="KAGGLE_KEY",
+        description="Optional Kaggle API key when downloading datasets.",
+    )
+    location: str | None = Field(
+        None,
+        alias="LOCATION",
+        description="Optional Azure region to target for resource creation.",
+    )
 
     class Config:
         env_file = ".env"
