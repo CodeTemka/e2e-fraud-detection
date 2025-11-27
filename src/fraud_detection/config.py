@@ -23,6 +23,11 @@ class Settings(BaseSettings):
         alias="AML_DATASET",
         description="Default MLTable asset for training jobs.",
     )
+    github_token: str = Field(..., alias="GITHUB_TOKEN")
+    github_owner: str = Field(..., alias="GITHUB_OWNER")
+    github_repo: str = Field(..., alias="GITHUB_REPO")
+    kaggle_username: str = Field(..., alias="KAGGLE_USERNAME")
+    kaggle_key: str = Field(..., alias="KAGGLE_KEY")
 
     class Config:
         env_file = ".env"
