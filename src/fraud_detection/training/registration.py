@@ -1,7 +1,7 @@
 """Utilities to register the best AutoML child runs as models."""
 from __future__ import annotations
 
-from typing import Dict, Iterable
+from collections.abc import Iterable
 
 import mlflow
 from azure.ai.ml import MLClient
@@ -13,7 +13,7 @@ from fraud_detection.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def list_completed_jobs(ml_client: MLClient, experiments: Iterable[str]) -> Dict[str, str]:
+def list_completed_jobs(ml_client: MLClient, experiments: Iterable[str]) -> dict[str, str]:
     """Return a mapping of job name to experiment for completed jobs in the provided experiments."""
 
     completed = {}

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -19,7 +18,7 @@ class Settings(BaseSettings):
         alias="AML_COMPUTE",
         description="Default compute target used for Azure ML jobs.",
     )
-    default_dataset: Optional[str] = Field(
+    default_dataset: str | None = Field(
         "azureml:mltable_creditcard_data:1",
         alias="AML_DATASET",
         description="Default MLTable asset for training jobs.",

@@ -1,8 +1,8 @@
 """Opinionated helpers to submit Azure AutoML jobs."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Optional
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
@@ -24,8 +24,8 @@ class AutoMLJobConfig:
     compute: str
     training_data: str
     cross_validations: int = 5
-    tags: Dict[str, str] = field(default_factory=dict)
-    allowed_algorithms: Optional[Iterable[str]] = None
+    tags: dict[str, str] = field(default_factory=dict)
+    allowed_algorithms: Iterable[str] | None = None
     timeout_minutes: int = 480
     trial_timeout_minutes: int = 60
     max_trials: int = 20

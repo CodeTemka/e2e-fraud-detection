@@ -1,6 +1,4 @@
-# Downloading dataset from kaggle using kaggle api
-# Dataset:https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
-# Make sure to have kaggle credentials set in environment variables or kaggle.json file
+"""Download the Kaggle credit card fraud dataset if it is missing."""
 
 import os
 from pathlib import Path
@@ -12,16 +10,25 @@ settings = get_settings()
 os.environ["KAGGLE_USERNAME"] = settings.kaggle_username
 os.environ["KAGGLE_KEY"] = settings.kaggle_key
 
-path = Path('data')
+DATA_DIR = Path("data")
+DATA_FILE = DATA_DIR / "creditcard.csv"
 
-try:
-    os.path.exists('creditcard.csv')
-    print('Dataset already exists. Skipping download.')
-except FileNotFoundError as e:
-    print('Dataset not found. Downloading...')
+
+def main() -> None:
+    if DATA_FILE.exists():
+        print("Dataset already exists. Skipping download.")
+        return
+
+    print("Dataset not found. Downloading...")
     from kaggle.api.kaggle_api_extended import KaggleApi
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     api = KaggleApi()
     api.authenticate()
 
-    api.dataset_download_files('mlg-ulb/creditcardfraud', path=path, unzip=True)
+    api.dataset_download_files("mlg-ulb/creditcardfraud", path=DATA_DIR, unzip=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -17,16 +17,18 @@ DEFAULT_NAME = "creditcard-data"
 DEFAULT_VERSION = "1"
 DEFAULT_DESCRIPTION = "Credit Card Fraud Detection Dataset"
 
+PATH_OPTION = typer.Option(
+    DEFAULT_DATA_PATH,
+    exists=True,
+    dir_okay=False,
+    readable=True,
+    help="Path to the local data file to register.",
+)
+
 
 @app.command()
 def register(
-    path: Path = typer.Option(
-        DEFAULT_DATA_PATH,
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to the local data file to register.",
-    ),
+    path: Path = PATH_OPTION,
     name: str = typer.Option(DEFAULT_NAME, help="Name of the data asset."),
     version: str = typer.Option(DEFAULT_VERSION, help="Version of the data asset."),
     description: str = typer.Option(DEFAULT_DESCRIPTION, help="Description for the data asset."),
