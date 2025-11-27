@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     github_repo: str = Field(..., alias="GITHUB_REPO")
     kaggle_username: str = Field(..., alias="KAGGLE_USERNAME")
     kaggle_key: str = Field(..., alias="KAGGLE_KEY")
+    location: str = Field(..., alias="LOCATION")
 
     class Config:
         env_file = ".env"
