@@ -14,6 +14,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a LightGBM fraud classifier locally")
     parser.add_argument(
         "--data-path",
+        dest='data_path',
         type=str,
         required=True,
         help="Path to the training data CSV file (must include a 'Class' column)",
