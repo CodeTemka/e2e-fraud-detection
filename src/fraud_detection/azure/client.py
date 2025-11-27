@@ -1,8 +1,6 @@
 """Helpers for working with Azure ML clients."""
 from __future__ import annotations
 
-from typing import Optional
-
 from azure.ai.ml import MLClient
 from azure.identity import DefaultAzureCredential
 
@@ -19,7 +17,7 @@ def build_default_credential() -> DefaultAzureCredential:
 
 
 def get_ml_client(
-    *, settings: Optional[Settings] = None, credential: Optional[DefaultAzureCredential] = None
+    *, settings: Settings | None = None, credential: DefaultAzureCredential | None = None
 ) -> MLClient:
     """Instantiate an :class:`~azure.ai.ml.MLClient` using project settings."""
 

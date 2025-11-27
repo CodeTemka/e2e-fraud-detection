@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 _LOGGER_NAME = "fraud_detection"
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     logger_name = name or _LOGGER_NAME
     logger = logging.getLogger(logger_name)
 

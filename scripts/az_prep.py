@@ -1,4 +1,5 @@
 """Utility to prepare Azure resources for the fraud detection demo."""
+
 import json
 import subprocess
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Workspace
 from azure.identity import ClientSecretCredential
+
 from fraud_detection.config import get_settings
 
 

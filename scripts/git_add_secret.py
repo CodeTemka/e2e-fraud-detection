@@ -1,8 +1,9 @@
 import base64
-import requests
-from nacl import encoding, public
 import json
 from pathlib import Path
+
+import requests
+from nacl import encoding, public
 
 from fraud_detection.config import get_settings
 
@@ -11,16 +12,16 @@ settings = get_settings()
 GITHUB_TOKEN = settings.github_token
 OWNER = settings.github_owner
 REPO = settings.github_repo
-SECRETS = Path('json') / 'sp_credentials.json'
+SECRETS = Path("json") / "sp_credentials.json"
 
-with open(SECRETS, 'r') as f:
+with open(SECRETS, encoding="utf-8") as f:
     secrets = json.load(f)
 
 url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/public-key"
 
 headers = {
     "Authorization": f"token {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json"
+    "Accept": "application/vnd.github+json",
 }
 
 response = requests.get(url, headers=headers)
@@ -33,10 +34,12 @@ public_key_str = response.json()["key"]
 public_key = public.PublicKey(public_key_str.encode("utf-8"), encoding.Base64Encoder())
 sealed_box = public.SealedBox(public_key)
 
-def secret_exists(secret_name):
+
+def secret_exists(secret_name: str) -> bool:
     check_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/{secret_name}"
     resp = requests.get(check_url, headers=headers)
     return resp.status_code == 200
+
 
 # Upload or update each secret
 for name, value in secrets.items():
