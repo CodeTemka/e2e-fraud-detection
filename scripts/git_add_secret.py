@@ -1,16 +1,16 @@
 import base64
 import requests
 from nacl import encoding, public
-from dotenv import load_dotenv
-import os
 import json
 from pathlib import Path
 
-load_dotenv()
+from fraud_detection.config import get_settings
 
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-OWNER = os.getenv('GITHUB_OWNER')
-REPO = os.getenv('GITHUB_REPO')
+settings = get_settings()
+
+GITHUB_TOKEN = settings.github_token
+OWNER = settings.github_owner
+REPO = settings.github_repo
 SECRETS = Path('json') / 'sp_credentials.json'
 
 with open(SECRETS, 'r') as f:

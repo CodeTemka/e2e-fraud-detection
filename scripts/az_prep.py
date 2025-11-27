@@ -1,17 +1,16 @@
 """Utility to prepare Azure resources for the fraud detection demo."""
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Workspace
 from azure.identity import ClientSecretCredential
-from dotenv import load_dotenv
+from fraud_detection.config import get_settings
 
 
 def main():
-    load_dotenv()
+    settings = get_settings()
 
     result = subprocess.run(
         ["where", "az"],
@@ -29,16 +28,10 @@ def main():
     print("Using AZ:", az_path)
 
 
-    def require_env_var(var_name: str) -> str:
-        value = os.getenv(var_name)
-        if not value:
-            raise ValueError(f"Environment variable '{var_name}' is required but was not found.")
-        return value
-
     # 2 Create a resource group
     def create_resource_group():
-        resource_group_name = require_env_var("RESOURCE_GROUP")
-        location = require_env_var("LOCATION")
+        resource_group_name = settings.resource_group
+        location = settings.location
 
         subprocess.run([az_path, "login"], check=True)
 
@@ -76,8 +69,8 @@ def main():
         if not create_resource_group():
             raise RuntimeError("Failed to create resource group.")
 
-        subscription_id = require_env_var("SUBSCRIPTION_ID")
-        resource_group = require_env_var("RESOURCE_GROUP")
+        subscription_id = settings.subscription_id
+        resource_group = settings.resource_group
         sp_name = "e2e-fraud-detection-sp"
         role = "Contributor"
         output_dir = Path("json")
@@ -128,10 +121,10 @@ def main():
             client_id=sp_data["clientId"],
             client_secret=sp_data["clientSecret"],
         )
-        subscription_id = require_env_var("SUBSCRIPTION_ID")
-        resource_group = require_env_var("RESOURCE_GROUP")
-        workspace_name = require_env_var("WORKSPACE_NAME")
-        location = require_env_var("LOCATION")
+        subscription_id = settings.subscription_id
+        resource_group = settings.resource_group
+        workspace_name = settings.workspace_name
+        location = settings.location
 
         ml_client = MLClient(
             credential=credential,

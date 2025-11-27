@@ -3,12 +3,14 @@
 # Make sure to have kaggle credentials set in environment variables or kaggle.json file
 
 import os
-from dotenv import load_dotenv
 from pathlib import Path
-load_dotenv()
 
-os.environ['KAGGLE_USERNAME'] = os.getenv('KAGGLE_USERNAME')
-os.environ['KAGGLE_KEY'] = os.getenv('KAGGLE_KEY')
+from fraud_detection.config import get_settings
+
+settings = get_settings()
+
+os.environ["KAGGLE_USERNAME"] = settings.kaggle_username
+os.environ["KAGGLE_KEY"] = settings.kaggle_key
 
 path = Path('data')
 
