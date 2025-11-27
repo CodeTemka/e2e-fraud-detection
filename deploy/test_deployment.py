@@ -1,7 +1,3 @@
-import os
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-
 from fraud_detection.azure.client import get_ml_client
 
 ml_client = get_ml_client()
