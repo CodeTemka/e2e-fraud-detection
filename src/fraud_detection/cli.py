@@ -16,6 +16,8 @@ from fraud_detection.training.registration import list_completed_jobs, register_
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs for fraud detection.")
 
+DEFAULT_EXPERIMENTS = ["automl-fraud-recall", "automl-fraud-accuracy"]
+
 
 @app.command()
 def submit_automl(
@@ -60,13 +62,30 @@ def submit_automl(
 
 
 @app.command()
-def register_models():
+def register_models(
+    experiment: list[str] = typer.Option(
+        None,
+        "--experiment",
+        "-e",
+        help="Name of the experiment(s) to process. Can be passed multiple times.",
+    ),
+):
     """Register the best child run for each completed AutoML experiment."""
 
     settings = get_settings()
     ml_client = get_ml_client(settings=settings)
 
-    experiments = ["automl-fraud-recall", "automl-fraud-accuracy"]
+    experiments = experiment or DEFAULT_EXPERIMENTS
+    invalid_experiments = [name for name in experiments if name not in DEFAULT_EXPERIMENTS]
+    if invalid_experiments:
+        valid_options = ", ".join(DEFAULT_EXPERIMENTS)
+        invalid_options = ", ".join(invalid_experiments)
+        raise typer.BadParameter(
+            f"Invalid experiment name(s): {invalid_options}. Valid options are: {valid_options}."
+        )
+
+    typer.echo(f"Processing experiments: {', '.join(experiments)}")
+
     for job_name, experiment_name in list_completed_jobs(ml_client, experiments).items():
         register_best_child_run(ml_client, job_name=job_name, experiment_name=experiment_name)
 
