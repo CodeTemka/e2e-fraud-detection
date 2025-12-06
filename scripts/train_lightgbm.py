@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.metrics import auc, classification_report, confusion_matrix, precision_recall_curve
 from sklearn.model_selection import train_test_split
 
+from fraud_detection.data_validation import validate_creditcard_data
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +34,7 @@ def main() -> None:
     mlflow.lightgbm.autolog()
 
     df = pd.read_csv(args.data_path, index_col=False)
+    validate_creditcard_data(df)
     X_train, X_test, y_train, y_test = train_test_split(
         df.drop(columns=[target_column]),
         df[target_column],
