@@ -6,8 +6,10 @@ import requests
 from nacl import encoding, public
 
 from fraud_detection.config import get_settings
+from fraud_detection.utils.logging import get_logger
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 GITHUB_TOKEN = settings.github_token
 OWNER = settings.github_owner
@@ -54,8 +56,10 @@ for name, value in secrets.items():
 
     if put_resp.status_code in (201, 204):
         if secret_exists(name):
-            print(f"Secret '{name}' updated successfully.")
+            logger.info("Secret '%s' updated successfully.", name)
         else:
-            print(f"Secret '{name}' created successfully.")
+            logger.info("Secret '%s' created successfully.", name)
     else:
-        print(f"Failed to upload {name}: {put_resp.status_code} - {put_resp.text}")
+        logger.error(
+            "Failed to upload %s: %s - %s", name, put_resp.status_code, put_resp.text
+        )

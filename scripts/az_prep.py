@@ -9,6 +9,9 @@ from azure.ai.ml.entities import Workspace
 from azure.identity import ClientSecretCredential
 
 from fraud_detection.config import get_settings
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -27,7 +30,7 @@ def main():
     if az_path is None:
         raise RuntimeError("Azure CLI (az.cmd) not found on this system.")
 
-    print("Using AZ:", az_path)
+    logger.info("Using AZ: %s", az_path)
 
 
     # 2 Create a resource group
@@ -54,16 +57,16 @@ def main():
                 "--location", location,
                 "--output", "json",
             ]
-            print(f"Creating resource group: {resource_group_name}")
+            logger.info("Creating resource group: %s", resource_group_name)
             result = subprocess.run(
                 create_cmd,
                 capture_output=True,
                 text=True,
                 check=True
             )
-            print(result.stdout)
+            logger.info(result.stdout)
         else:
-            print(f"Resource group '{resource_group_name}' already exists.")
+            logger.info("Resource group '%s' already exists.", resource_group_name)
         return True
 
     # 3 Create a service principal
@@ -90,10 +93,10 @@ def main():
             return bool(app_id)
 
         if sp_exists(sp_name):
-            print(f"Service principal '{sp_name}' already exists. Skipping creation.")
+            logger.info("Service principal '%s' already exists. Skipping creation.", sp_name)
             return True
 
-        print(f"Creating service principal '{sp_name}'...")
+        logger.info("Creating service principal '%s'...", sp_name)
         cmd = [
             az_path, "ad", "sp", "create-for-rbac",
             "--name", sp_name,
@@ -107,7 +110,7 @@ def main():
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(result.stdout)
 
-        print(f"Service principal credentials saved to '{output_file}'")
+        logger.info("Service principal credentials saved to '%s'", output_file)
         return True
 
     # 4 Create workspace using service principal
@@ -144,9 +147,9 @@ def main():
 
         try:
             ml_client.workspaces.get(name=workspace_name)
-            print(f"Workspace {workspace_name} already exists.")
+            logger.info("Workspace %s already exists.", workspace_name)
         except Exception:
-            print(f"Creating workspace {workspace_name}...")
+            logger.info("Creating workspace %s...", workspace_name)
             poller = ml_client.workspaces.begin_create(ws)
             poller.result()
 

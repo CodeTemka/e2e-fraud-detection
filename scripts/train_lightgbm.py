@@ -9,6 +9,10 @@ import pandas as pd
 from sklearn.metrics import auc, classification_report, confusion_matrix, precision_recall_curve
 from sklearn.model_selection import train_test_split
 
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a LightGBM fraud classifier locally")
@@ -38,7 +42,7 @@ def main() -> None:
     )
 
     scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-    print(f"scale_pos_weight: {scale_pos_weight:.2f}")
+    logger.info("scale_pos_weight: %.2f", scale_pos_weight)
 
     model = lgb.LGBMClassifier(
         objective="binary",
@@ -65,17 +69,15 @@ def main() -> None:
     y_pred_prob = model.predict_proba(X_test)[:, 1]
     y_pred = (y_pred_prob > 0.5).astype(int)
 
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, digits=4))
-    print("\nConfusion Matrix:")
-    print(confusion_matrix(y_test, y_pred))
+    logger.info("\nClassification Report:\n%s", classification_report(y_test, y_pred, digits=4))
+    logger.info("\nConfusion Matrix:\n%s", confusion_matrix(y_test, y_pred))
 
     precision, recall, _ = precision_recall_curve(y_test, y_pred_prob)
     pr_auc = auc(recall, precision)
-    print(f"\nPrecision-Recall AUC: {pr_auc:.4f}")
+    logger.info("\nPrecision-Recall AUC: %.4f", pr_auc)
 
     model.booster_.save_model("lightgbm_fraud_model.txt")
-    print("\n✅ Model saved to 'lightgbm_fraud_model.txt'")
+    logger.info("\n✅ Model saved to 'lightgbm_fraud_model.txt'")
 
     conda_env = mlflow.lightgbm.get_default_conda_env()
     mlflow.lightgbm.log_model(
