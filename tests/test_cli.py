@@ -42,3 +42,33 @@ def test_register_models_rejects_invalid_experiment(monkeypatch):
     assert "Invalid experiment name" in result.output
     assert "automl-fraud-recall" in result.output
     assert "automl-fraud-accuracy" in result.output
+
+
+def test_submit_automl_recall_uses_norm_macro_recall(monkeypatch):
+    runner = CliRunner()
+    captured = {}
+
+    class FakeSettings:
+        default_dataset = "azureml:dataset:1"
+        default_compute = "cpu-cluster"
+
+    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+
+    def _create_automl_job(config):
+        captured["primary_metric"] = config.primary_metric
+        return {"job": "definition"}
+
+    def _submit_job(ml_client, job):
+        captured["submitted_job"] = job
+        return "run-123"
+
+    monkeypatch.setattr(cli, "create_automl_job", _create_automl_job)
+    monkeypatch.setattr(cli, "submit_job", _submit_job)
+
+    result = runner.invoke(cli.app, ["submit-automl", "--metric", "recall"])
+
+    assert result.exit_code == 0
+    assert captured["primary_metric"] == "norm_macro_recall"
+    assert captured["submitted_job"] == {"job": "definition"}
+    assert "Job submitted successfully" in result.output
