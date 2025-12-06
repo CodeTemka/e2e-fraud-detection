@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -53,6 +53,15 @@ class Settings(BaseSettings):
         alias="LOCATION",
         description="Optional Azure region to target for resource creation.",
     )
+
+    @model_validator(mode="after")
+    def validate_dataset(self) -> "Settings":
+        """Ensure a default dataset is configured for training jobs."""
+
+        if not self.default_dataset:
+            msg = "Set AML_DATASET to the MLTable asset used for training jobs."
+            raise ValueError(msg)
+        return self
 
     class Config:
         env_file = ".env"

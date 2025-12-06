@@ -38,10 +38,20 @@ def submit_automl(
     else:
         raise typer.BadParameter("metric must be either 'recall' or 'accuracy'")
 
-    if dataset:
+    if dataset is not None:
         config.training_data = dataset
-    if compute:
+    if compute is not None:
         config.compute = compute
+
+    if not config.training_data:
+        raise typer.BadParameter(
+            "Provide a dataset via --dataset option or set AML_DATASET environment variable."
+        )
+
+    if not config.compute:
+        raise typer.BadParameter(
+            "Provide a compute target via --compute option or set AML_COMPUTE environment variable."
+        )
 
     job = create_automl_job(config)
     ml_client = get_ml_client(settings=settings)
