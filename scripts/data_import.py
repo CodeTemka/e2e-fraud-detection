@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 
 from fraud_detection.config import get_settings
+from fraud_detection.utils.logging import get_logger
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 os.environ["KAGGLE_USERNAME"] = settings.kaggle_username
 os.environ["KAGGLE_KEY"] = settings.kaggle_key
@@ -16,10 +18,10 @@ DATA_FILE = DATA_DIR / "creditcard.csv"
 
 def main() -> None:
     if DATA_FILE.exists():
-        print("Dataset already exists. Skipping download.")
+        logger.info("Dataset already exists. Skipping download.")
         return
 
-    print("Dataset not found. Downloading...")
+    logger.info("Dataset not found. Downloading...")
     from kaggle.api.kaggle_api_extended import KaggleApi
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)

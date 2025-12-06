@@ -1,4 +1,7 @@
 from fraud_detection.azure.client import get_ml_client
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 ml_client = get_ml_client()
 
@@ -10,4 +13,4 @@ registered_models = [
 ]
 
 for model in registered_models:
-    print(model.name)
+    logger.info("%s", model.name)

@@ -14,6 +14,9 @@ from typing import Dict
 from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
 
 from fraud_detection.azure.client import get_ml_client
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def create_endpoint(name: str | None = None, description: str | None = None) -> str:
@@ -128,7 +131,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _handle_create(args: argparse.Namespace) -> None:
     endpoint_name = create_endpoint(name=args.name, description=args.description)
-    print(f"Created endpoint: {endpoint_name}")
+    logger.info("Created endpoint", extra={"endpoint_name": endpoint_name})
 
 
 def _handle_deploy(args: argparse.Namespace) -> None:
@@ -140,7 +143,10 @@ def _handle_deploy(args: argparse.Namespace) -> None:
         instance_type=args.instance_type,
         instance_count=args.instance_count,
     )
-    print(f"Deployment '{deployment.name}' is ready on endpoint '{deployment.endpoint_name}'.")
+    logger.info(
+        "Deployment is ready",
+        extra={"deployment_name": deployment.name, "endpoint_name": deployment.endpoint_name},
+    )
 
 
 def _handle_traffic(args: argparse.Namespace) -> None:
@@ -148,12 +154,15 @@ def _handle_traffic(args: argparse.Namespace) -> None:
     for mapping in args.traffic:
         combined_traffic.update(mapping)
     update_traffic(endpoint_name=args.endpoint_name, traffic=combined_traffic)
-    print(f"Updated traffic for endpoint '{args.endpoint_name}': {combined_traffic}")
+    logger.info(
+        "Updated endpoint traffic",
+        extra={"endpoint_name": args.endpoint_name, "traffic": combined_traffic},
+    )
 
 
 def _handle_delete(args: argparse.Namespace) -> None:
     delete_endpoint(endpoint_name=args.endpoint_name)
-    print(f"Deleted endpoint: {args.endpoint_name}")
+    logger.info("Deleted endpoint", extra={"endpoint_name": args.endpoint_name})
 
 
 def main() -> None:
