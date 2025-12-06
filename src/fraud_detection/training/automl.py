@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
+import subprocess
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
@@ -76,13 +78,17 @@ def lightgbm_recall_job(settings: Settings) -> AutoMLJobConfig:
     """Preconfigured job optimized for recall on the fraud dataset."""
 
     return AutoMLJobConfig(
-        experiment_name="automl-fraud-recall",
+        experiment_name=_build_experiment_name(metric="recall"),
         target_column="Class",
         primary_metric="norm_macro_recall",
         compute=settings.default_compute,
         training_data=settings.default_dataset or "",
         cross_validations=10,
-        tags={"project": "fraud-detection", "metric": "recall"},
+        tags={
+            "project": "e2e-fraud-detection",
+            "metric": "recall",
+            "git_sha": _get_git_sha(),
+        },
         max_trials=40,
         max_concurrent_trials=4,
     )
@@ -92,17 +98,42 @@ def lightgbm_accuracy_job(settings: Settings) -> AutoMLJobConfig:
     """Preconfigured job optimized for accuracy with only LightGBM allowed."""
 
     return AutoMLJobConfig(
-        experiment_name="automl-fraud-accuracy",
+        experiment_name=_build_experiment_name(metric="accuracy"),
         target_column="Class",
         primary_metric=ClassificationPrimaryMetrics.ACCURACY,
         compute=settings.default_compute,
         training_data=settings.default_dataset or "",
         cross_validations=5,
         allowed_algorithms=["LightGBM"],
-        tags={"project": "fraud-detection", "metric": "accuracy", "model": "LightGBM"},
+        tags={
+            "project": "e2e-fraud-detection",
+            "metric": "accuracy",
+            "git_sha": _get_git_sha(),
+            "model": "LightGBM",
+        },
         max_trials=80,
         max_concurrent_trials=4,
     )
+
+
+def _build_experiment_name(metric: str) -> str:
+    """Create a descriptive experiment name for Azure AutoML runs."""
+
+    date_stamp = datetime.now().strftime("%Y%m%d")
+    short_git_commit = _get_git_sha()[:7]
+    return f"fraud-automl-{metric}-{date_stamp}-{short_git_commit}"
+
+
+def _get_git_sha() -> str:
+    """Return the current git commit SHA for tagging experiments."""
+
+    completed_process = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed_process.stdout.strip()
 
 
 __all__ = [
