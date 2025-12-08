@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def validate_dataset(self) -> "Settings":
+    def validate_dataset(self) -> Settings:
         """Ensure a default dataset is configured for training jobs."""
 
         if not self.default_dataset:

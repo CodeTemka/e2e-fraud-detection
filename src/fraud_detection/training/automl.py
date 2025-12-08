@@ -1,10 +1,10 @@
 """Opinionated helpers to submit Azure AutoML jobs."""
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-import subprocess
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics

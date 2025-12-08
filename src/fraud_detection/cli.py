@@ -1,6 +1,8 @@
 """Command-line interface for the fraud detection toolkit."""
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 
 from fraud_detection.azure.client import get_ml_client
@@ -63,12 +65,14 @@ def submit_automl(
 
 @app.command()
 def register_models(
-    experiment: list[str] = typer.Option(
-        None,
-        "--experiment",
-        "-e",
-        help="Name of the experiment(s) to process. Can be passed multiple times.",
-    ),
+    experiment: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--experiment",
+            "-e",
+            help="Name of the experiment(s) to process. Can be passed multiple times.",
+        ),
+    ] = None,
 ):
     """Register the best child run for each completed AutoML experiment."""
 
