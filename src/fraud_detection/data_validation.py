@@ -1,11 +1,11 @@
 """Utilities for validating credit card fraud datasets."""
+
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import pandas as pd
 from pandas.api import types as ptypes
-
 
 REQUIRED_COLUMNS: tuple[str, ...] = (
     "Time",

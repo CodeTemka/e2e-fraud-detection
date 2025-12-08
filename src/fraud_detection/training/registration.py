@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Optional
 
 import mlflow
 from azure.ai.ml import MLClient
@@ -32,7 +31,7 @@ def register_best_child_run(
     experiment_name: str,
     skip_on_missing_best_child: bool = True,
     skip_on_model_error: bool = True,
-) -> Optional[Model]:
+) -> Model | None:
     """Register the best child run from an AutoML parent job as an MLflow model.
 
     Parameters
