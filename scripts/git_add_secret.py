@@ -1,9 +1,16 @@
 import base64
 import json
+import sys
 from pathlib import Path
 
 import requests
 from nacl import encoding, public
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from fraud_detection.config import get_settings
 from fraud_detection.utils.logging import get_logger
