@@ -7,10 +7,18 @@ predictable name so it can be deployed reliably.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Iterable
 
+import sys
 import typer
 from azure.ai.ml import MLClient
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.cli import DEFAULT_EXPERIMENTS

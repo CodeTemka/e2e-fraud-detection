@@ -9,8 +9,10 @@ from azure.ai.ml.entities import Data
 from azure.core.exceptions import ResourceNotFoundError
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from fraud_detection.azure.client import get_ml_client
 

@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 from azure.core.exceptions import ResourceNotFoundError
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from deploy.manage_online_endpoint import create_endpoint, deploy_model, update_traffic
 from fraud_detection.azure.client import get_ml_client
