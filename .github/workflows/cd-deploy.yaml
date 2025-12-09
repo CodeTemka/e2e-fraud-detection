@@ -19,20 +19,26 @@ jobs:
       startsWith(github.event.workflow_run.head_branch, 'v')
 
     env:
-      # Azure auth & workspace info from GitHub Secrets
+      # Azure authentication (service principal)
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_ML_RESOURCE_GROUP: ${{ secrets.AZURE_ML_RESOURCE_GROUP }}
-      AZURE_ML_WORKSPACE: ${{ secrets.AZURE_ML_WORKSPACE }}
+
+      # Azure ML workspace + project settings (consumed by pydantic Settings)
+      SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      RESOURCE_GROUP: ${{ secrets.AZURE_ML_RESOURCE_GROUP }}
+      WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE }}
+      LOCATION: ${{ secrets.AZURE_ML_LOCATION }}
+      AML_COMPUTE: ${{ secrets.AZURE_ML_COMPUTE }}
+      AML_DATASET: ${{ secrets.AZURE_ML_DATASET }}
+      INSTANCE_TYPE: ${{ secrets.AZURE_ML_INSTANCE_TYPE }}
+      INSTANCE_COUNT: ${{ secrets.AZURE_ML_INSTANCE_COUNT }}
 
       # Endpoint / deployment config
-      ENDPOINT_NAME: fraud-detection-1df0
+      ENDPOINT_NAME: fraud-detection-prod
       DEPLOYMENT_NAME: blue
-
-      # Use the tag name (e.g. v1.0.0) as version
-      APP_VERSION: ${{ github.event.workflow_run.head_branch }}
+      MODEL_NAME: fraud-detection-prod
 
     steps:
       - name: Checkout repository at CI commit
@@ -54,43 +60,33 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Log in to Azure using service principal
-        run: |
-          az login \
-            --service-principal \
-            --tenant "$AZURE_TENANT_ID" \
-            --username "$AZURE_CLIENT_ID" \
-            --password "$AZURE_CLIENT_SECRET"
-
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install Azure ML CLI extension and configure defaults
         run: |
           az extension add -n ml -y
           az configure --defaults \
-            group=$AZURE_ML_RESOURCE_GROUP \
-            workspace=$AZURE_ML_WORKSPACE
+            group=$RESOURCE_GROUP \
+            workspace=$WORKSPACE_NAME
 
-      # Optional: prepare model artifact
-      - name: Prepare model artifact (optional)
-        run: |
-          if [ -f deploy/prepare_model.py ]; then
-            python deploy/prepare_model.py --version "$APP_VERSION"
-          else
-            echo "No deploy/prepare_model.py found, skipping model preparation."
-          fi
+      - name: Register local fraud dataset (idempotent)
+        run: python scripts/register_data_asset.py register
 
-      - name: Deploy to Azure ML endpoint
+      - name: Promote latest AutoML job to stable model name
+        run: python deploy/promote_best_run.py --model-name "$MODEL_NAME"
+
+      - name: Deploy latest model version to endpoint
         run: |
-          python deploy/aml_deploy.py \
+          python deploy/deploy_latest_model.py \
+            --model-name "$MODEL_NAME" \
             --endpoint-name "$ENDPOINT_NAME" \
             --deployment-name "$DEPLOYMENT_NAME" \
-            --version "$APP_VERSION"
+            --instance-type "${INSTANCE_TYPE:-Standard_E4s_v3}" \
+            --instance-count "${INSTANCE_COUNT:-1}"
 
       - name: Smoke test deployed endpoint
-        run: |
-          if [ -f deploy/smoke_test_endpoint.py ]; then
-            python deploy/smoke_test_endpoint.py \
-              --endpoint-name "$ENDPOINT_NAME"
-          else
-            echo "No deploy/smoke_test_endpoint.py found, skipping smoke test."
-          fi
+        run: python scripts/test_deployment.py

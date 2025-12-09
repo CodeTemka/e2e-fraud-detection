@@ -29,6 +29,7 @@ def register_best_child_run(
     *,
     job_name: str,
     experiment_name: str,
+    model_name: str | None = None,
     skip_on_missing_best_child: bool = True,
     skip_on_model_error: bool = True,
 ) -> Model | None:
@@ -69,13 +70,13 @@ def register_best_child_run(
         if skip_on_missing_best_child:
             return None
         raise KeyError(message)
-    model_name = f"{experiment_name.replace(' ', '_').lower()}_{job_name}_model"
+    resolved_model_name = model_name or f"{experiment_name.replace(' ', '_').lower()}_{job_name}_model"
 
     try:
         model = ml_client.models.create_or_update(
             Model(
                 path=f"azureml://jobs/{best_child_run_id}/outputs/artifacts/outputs/mlflow-model/",
-                name=model_name,
+                name=resolved_model_name,
                 description="AutoML classification model registered from best child run",
                 type=AssetTypes.MLFLOW_MODEL,
             )
@@ -87,7 +88,7 @@ def register_best_child_run(
                 "job_name": job_name,
                 "experiment": experiment_name,
                 "best_child_run_id": best_child_run_id,
-                "model_name": model_name,
+                "model_name": resolved_model_name,
             },
         )
         if skip_on_model_error:
