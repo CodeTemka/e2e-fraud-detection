@@ -90,3 +90,9 @@ jobs:
 
       - name: Smoke test deployed endpoint
         run: python scripts/test_deployment.py
+
+      - name: Delete endpoint after one hour to control costs
+        run: |
+          echo "Sleeping for one hour before deleting endpoint $ENDPOINT_NAME"
+          sleep 3600
+          python deploy/manage_online_endpoint.py delete "$ENDPOINT_NAME"
