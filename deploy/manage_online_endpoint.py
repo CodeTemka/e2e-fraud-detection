@@ -8,8 +8,16 @@ single entry point while keeping reusable functions for programmatic use.
 from __future__ import annotations
 
 import argparse
+import sys
 import uuid
+from pathlib import Path
 from typing import Dict
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
 

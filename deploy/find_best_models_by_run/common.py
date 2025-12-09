@@ -13,8 +13,10 @@ from mlflow.entities import Experiment, ViewType
 
 # Ensure project imports (e.g., fraud_detection.*) resolve when files are executed directly
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+SRC_DIR = PROJECT_ROOT / "src"
+for path in (SRC_DIR, PROJECT_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from fraud_detection.utils.logging import get_logger
 

@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Tuple
 
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+SRC_DIR = ROOT_DIR / "src"
+for path in (SRC_DIR, ROOT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.utils.logging import get_logger
 
