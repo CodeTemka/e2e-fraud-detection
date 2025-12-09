@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import lightgbm as lgb
 import mlflow
 import pandas as pd
 from sklearn.metrics import auc, classification_report, confusion_matrix, precision_recall_curve
 from sklearn.model_selection import train_test_split
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from fraud_detection.data_validation import validate_creditcard_data
 from fraud_detection.utils.logging import get_logger

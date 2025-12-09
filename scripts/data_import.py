@@ -1,7 +1,12 @@
 """Download the Kaggle credit card fraud dataset if it is missing."""
 
 import os
+import sys
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from fraud_detection.config import get_settings
 from fraud_detection.utils.logging import get_logger
