@@ -5,6 +5,11 @@ on:
     workflows: ["CI"]        # must match the name: CI
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (version tag) to deploy"
+        required: true
 
 jobs:
   deploy:
@@ -14,9 +19,12 @@ jobs:
     # Only run if:
     # - CI concluded successfully
     # - The ref (branch/tag) name starts with "v" → version tag
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v')) ||
+      (github.event_name == 'workflow_dispatch' &&
+       startsWith(github.event.inputs.ref, 'v'))
 
     env:
       # Azure authentication (service principal)
@@ -41,11 +49,11 @@ jobs:
       MODEL_NAME: fraud-detection-prod
 
     steps:
-      - name: Checkout repository at CI commit
+      - name: Checkout repository at target ref
         uses: actions/checkout@v4
         with:
-          # Checkout the exact commit that CI ran on
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # Checkout CI commit or manually provided ref
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
