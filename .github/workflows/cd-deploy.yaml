@@ -9,7 +9,7 @@ on:
     inputs:
       ref:
         description: "Git ref (version tag) to deploy"
-        required: true
+        required: false
 
 jobs:
   deploy:
@@ -18,13 +18,13 @@ jobs:
 
     # Only run if:
     # - CI concluded successfully
-    # - The ref (branch/tag) name starts with "v" → version tag
+    # - For CI runs: The ref (branch/tag) name starts with "v" → version tag
+    # - For manual runs: allow dispatch regardless of ref
     if: |
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        startsWith(github.event.workflow_run.head_branch, 'v')) ||
-      (github.event_name == 'workflow_dispatch' &&
-       startsWith(github.event.inputs.ref, 'v'))
+      (github.event_name == 'workflow_dispatch')
 
     env:
       # Azure authentication (service principal)
@@ -54,10 +54,13 @@ jobs:
         with:
           # Checkout CI commit or manually provided ref
           # For workflow_run, always use the exact commit SHA that passed CI.
-          # For manual dispatch, explicitly target the provided version tag.
+          # For manual dispatch, use the provided version tag when set, otherwise
+          # fall back to the workflow's ref.
           ref: ${{ github.event_name == 'workflow_run'
                   ? github.event.workflow_run.head_sha
-                  : format('refs/tags/{0}', github.event.inputs.ref) }}
+                  : (github.event.inputs.ref
+                        && format('refs/tags/{0}', github.event.inputs.ref)
+                        || github.ref) }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
