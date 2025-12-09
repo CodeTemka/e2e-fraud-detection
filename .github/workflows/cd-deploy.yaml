@@ -55,7 +55,7 @@ jobs:
           # Checkout CI commit or manually provided ref
           # For workflow_run, always use the exact commit SHA that passed CI.
           # For manual dispatch, explicitly target the provided version tag.
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || format('refs/tags/{0}', github.event.inputs.ref) }}
+          ref: ${{ github.event_name == 'workflow_run' ? github.event.workflow_run.head_sha : format('refs/tags/{0}', github.event.inputs.ref) }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
