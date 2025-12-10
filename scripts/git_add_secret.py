@@ -18,9 +18,17 @@ from fraud_detection.utils.logging import get_logger
 settings = get_settings()
 logger = get_logger(__name__)
 
-GITHUB_TOKEN = settings.github_token
-OWNER = settings.github_owner
-REPO = settings.github_repo
+def require_setting(value: str | None, env_var: str) -> str:
+    """Return the required setting or raise a clear error."""
+
+    if not value:
+        raise ValueError(f"Missing required environment variable: {env_var}")
+    return value
+
+
+GITHUB_TOKEN = require_setting(settings.github_token, "GITHUB_TOKEN")
+OWNER = require_setting(settings.github_owner, "GITHUB_OWNER")
+REPO = require_setting(settings.github_repo, "GITHUB_REPO")
 SECRETS = Path(__file__).resolve().parent.parent / "json" / "sp_credentials.json"
 
 with open(SECRETS, encoding="utf-8") as f:
@@ -29,11 +37,17 @@ with open(SECRETS, encoding="utf-8") as f:
 url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/public-key"
 
 headers = {
-    "Authorization": f"token {GITHUB_TOKEN}",
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Accept": "application/vnd.github+json",
+    "User-Agent": "e2e-fraud-detection-secret-uploader",
 }
 
 response = requests.get(url, headers=headers)
+if response.status_code == 401:
+    raise PermissionError(
+        "Failed to authenticate with GitHub API."
+        " Verify that GITHUB_TOKEN has 'repo' and 'actions' scopes."
+    )
 if response.status_code != 200:
     raise Exception(f"Failed to get public key: {response.text}")
 
