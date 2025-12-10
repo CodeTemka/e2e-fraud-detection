@@ -86,7 +86,7 @@ def main():
         resource_group = settings.resource_group
         sp_name = "e2e-fraud-detection-sp"
         role = "Contributor"
-        output_dir = Path("json")
+        output_dir = ROOT_DIR / "json"
         output_file = output_dir / "sp_credentials.json"
 
         def sp_exists(sp_name):
@@ -126,7 +126,7 @@ def main():
         if not service_principal_create():
             raise RuntimeError("Failed to create service principal.")
 
-        with open("sp_credentials.json", encoding="utf-8") as f:
+        with open(output_file, encoding="utf-8") as f:
             sp_data = json.load(f)
 
         credential = ClientSecretCredential(
