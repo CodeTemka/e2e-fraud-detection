@@ -39,6 +39,16 @@ class Settings(BaseSettings):
         alias="GITHUB_REPO",
         description="Optional GitHub repository name for automation scripts.",
     )
+    instance_type: str | None = Field(
+        None,
+        alias="INSTANCE_TYPE",
+        description="Optional default instance SKU for endpoint deployments.",
+    )
+    instance_count: int | None = Field(
+        None,
+        alias="INSTANCE_COUNT",
+        description="Optional default instance count for endpoint deployments.",
+    )
     kaggle_username: str | None = Field(
         None,
         alias="KAGGLE_USERNAME",

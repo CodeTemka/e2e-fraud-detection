@@ -20,20 +20,21 @@ jobs:
 
     env:
       # Azure authentication (service principal)
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # Secrets in the repository are stored without the AZURE_ prefix
+      AZURE_TENANT_ID: ${{ secrets.TENANTID }}
+      AZURE_CLIENT_ID: ${{ secrets.CLIENTID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.CLIENTSECRET }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
 
       # Azure ML workspace + project settings (consumed by pydantic Settings)
-      SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      RESOURCE_GROUP: ${{ secrets.AZURE_ML_RESOURCE_GROUP }}
-      WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE }}
-      LOCATION: ${{ secrets.AZURE_ML_LOCATION }}
-      AML_COMPUTE: ${{ secrets.AZURE_ML_COMPUTE }}
-      AML_DATASET: ${{ secrets.AZURE_ML_DATASET }}
-      INSTANCE_TYPE: ${{ secrets.AZURE_ML_INSTANCE_TYPE }}
-      INSTANCE_COUNT: ${{ secrets.AZURE_ML_INSTANCE_COUNT }}
+      SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
+      RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+      WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
+      LOCATION: ${{ secrets.LOCATION }}
+      AML_COMPUTE: ${{ secrets.AML_COMPUTE }}
+      AML_DATASET: ${{ secrets.AML_DATASET }}
+      INSTANCE_TYPE: ${{ secrets.INSTANCE_TYPE }}
+      INSTANCE_COUNT: ${{ secrets.INSTANCE_COUNT }}
 
       # Endpoint / deployment config
       ENDPOINT_NAME: fraud-detection-prod
@@ -59,13 +60,34 @@ jobs:
         run: |
           pip install -e ".[dev]"
 
+      - name: Validate required deployment secrets
+        run: |
+          required_vars=(
+            AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SUBSCRIPTION_ID
+            RESOURCE_GROUP WORKSPACE_NAME LOCATION AML_COMPUTE AML_DATASET
+          )
+
+          missing=()
+          for var in "${required_vars[@]}"; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing required secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+          echo "All required secrets are present."
+
       - name: Log in to Azure using service principal
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.CLIENTID }}
+          client-secret: ${{ secrets.CLIENTSECRET }}
+          tenant-id: ${{ secrets.TENANTID }}
+          subscription-id: ${{ secrets.SUBSCRIPTIONID }}
 
       - name: Install Azure ML CLI extension and configure defaults
         run: |

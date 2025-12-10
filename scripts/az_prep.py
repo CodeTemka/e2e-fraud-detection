@@ -1,6 +1,7 @@
 """Utility to prepare Azure resources for the fraud detection demo."""
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -25,18 +26,9 @@ logger = get_logger(__name__)
 def main():
     settings = get_settings().require_azure()
 
-    result = subprocess.run(
-        ["where", "az"],
-        capture_output=True,
-        text=True,
-        check=True
-    )
-    az_path = next(
-        (p.strip() for p in result.stdout.splitlines() if p.strip().lower().endswith(".cmd")),
-        None
-    )
+    az_path = shutil.which("az")
     if az_path is None:
-        raise RuntimeError("Azure CLI (az.cmd) not found on this system.")
+        raise RuntimeError("Azure CLI (az) not found on this system.")
 
     logger.info("Using AZ: %s", az_path)
 
@@ -126,7 +118,8 @@ def main():
         if not service_principal_create():
             raise RuntimeError("Failed to create service principal.")
 
-        with open("sp_credentials.json", encoding="utf-8") as f:
+        sp_credentials_path = Path("json") / "sp_credentials.json"
+        with open(sp_credentials_path, encoding="utf-8") as f:
             sp_data = json.load(f)
 
         credential = ClientSecretCredential(
