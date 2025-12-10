@@ -10,9 +10,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application-wide settings loaded from environment variables."""
 
-    subscription_id: str = Field(..., alias="SUBSCRIPTION_ID")
-    resource_group: str = Field(..., alias="RESOURCE_GROUP")
-    workspace_name: str = Field(..., alias="WORKSPACE_NAME")
+    subscription_id: str | None = Field(None, alias="SUBSCRIPTION_ID")
+    resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
+    workspace_name: str | None = Field(None, alias="WORKSPACE_NAME")
     default_compute: str = Field(
         "automated-ml-cluster",
         alias="AML_COMPUTE",
@@ -61,6 +61,23 @@ class Settings(BaseSettings):
         if not self.default_dataset:
             msg = "Set AML_DATASET to the MLTable asset used for training jobs."
             raise ValueError(msg)
+        return self
+
+    def require_azure(self) -> Settings:
+        """Ensure Azure-specific settings are present before use."""
+
+        required = {
+            "subscription_id": "SUBSCRIPTION_ID",
+            "resource_group": "RESOURCE_GROUP",
+            "workspace_name": "WORKSPACE_NAME",
+        }
+        missing = [env for attr, env in required.items() if not getattr(self, attr)]
+
+        if missing:
+            env_list = ", ".join(missing)
+            msg = f"Missing Azure configuration. Set environment variables: {env_list}."
+            raise ValueError(msg)
+
         return self
 
     class Config:

@@ -6,6 +6,11 @@ class DummySettings:
         self.subscription_id = "sub-id"
         self.resource_group = "rg-name"
         self.workspace_name = "ws-name"
+        self.require_called = False
+
+    def require_azure(self):
+        self.require_called = True
+        return self
 
 
 def test_build_default_credential_uses_non_interactive(monkeypatch):
@@ -45,6 +50,7 @@ def test_get_ml_client_uses_defaults(monkeypatch):
     returned_client = client.get_ml_client()
 
     assert isinstance(returned_client, DummyMLClient)
+    assert settings.require_called is True
     assert captured_kwargs == {
         "credential": credential,
         "subscription_id": settings.subscription_id,

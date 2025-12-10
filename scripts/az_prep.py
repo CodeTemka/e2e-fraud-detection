@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 
 def main():
-    settings = get_settings()
+    settings = get_settings().require_azure()
 
     result = subprocess.run(
         ["where", "az"],
