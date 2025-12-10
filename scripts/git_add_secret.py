@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 GITHUB_TOKEN = settings.github_token
 OWNER = settings.github_owner
 REPO = settings.github_repo
-SECRETS = Path("json") / "sp_credentials.json"
+SECRETS = Path(__file__).resolve().parent.parent / "json" / "sp_credentials.json"
 
 with open(SECRETS, encoding="utf-8") as f:
     secrets = json.load(f)
