@@ -11,6 +11,10 @@ jobs:
     name: Deploy after successful CI
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write   # Required for OIDC authentication
+      contents: read
+
     # Only run if:
     # - CI concluded successfully
     # - The ref (branch/tag) name starts with "v" → version tag
@@ -23,7 +27,6 @@ jobs:
       # Secrets in the repository are stored without the AZURE_ prefix
       AZURE_TENANT_ID: ${{ secrets.TENANTID }}
       AZURE_CLIENT_ID: ${{ secrets.CLIENTID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.CLIENTSECRET }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
 
       # Azure ML workspace + project settings (consumed by pydantic Settings)
@@ -63,7 +66,7 @@ jobs:
       - name: Validate required deployment secrets
         run: |
           required_vars=(
-            AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SUBSCRIPTION_ID
+            AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_SUBSCRIPTION_ID
             RESOURCE_GROUP WORKSPACE_NAME LOCATION AML_COMPUTE AML_DATASET
           )
 
@@ -81,11 +84,10 @@ jobs:
 
           echo "All required secrets are present."
 
-      - name: Log in to Azure using service principal
+      - name: Log in to Azure using federated credentials
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.CLIENTID }}
-          client-secret: ${{ secrets.CLIENTSECRET }}
           tenant-id: ${{ secrets.TENANTID }}
           subscription-id: ${{ secrets.SUBSCRIPTIONID }}
 
