@@ -84,12 +84,10 @@ jobs:
 
           echo "All required secrets are present."
 
-      - name: Log in to Azure using federated credentials
+      - name: Log in to Azure with a Service Principal Secret
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.CLIENTID }}
-          tenant-id: ${{ secrets.TENANTID }}
-          subscription-id: ${{ secrets.SUBSCRIPTIONID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Install Azure ML CLI extension and configure defaults
         run: |
