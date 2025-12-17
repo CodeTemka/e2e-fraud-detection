@@ -102,22 +102,26 @@ jobs:
         run: python scripts/register_data_asset.py register
 
       - name: Promote latest AutoML job to stable model name
-        run: python deploy/promote_best_run.py --model-name "$MODEL_NAME"
+        run: fraud-cli register-best-automl-model --model-name "$MODEL_NAME"
 
       - name: Deploy latest model version to endpoint
         run: |
-          python deploy/deploy_latest_model.py \
+          fraud-cli deploy \
+            --strategy latest \
             --model-name "$MODEL_NAME" \
-            --endpoint-name "$ENDPOINT_NAME" \
-            --deployment-name "$DEPLOYMENT_NAME" \
+            --endpoint "$ENDPOINT_NAME" \
+            --deployment "$DEPLOYMENT_NAME" \
             --instance-type "${INSTANCE_TYPE:-Standard_E4s_v3}" \
             --instance-count "${INSTANCE_COUNT:-1}"
 
       - name: Smoke test deployed endpoint
-        run: python scripts/test_deployment.py
+        run: |
+          python scripts/test_deployment.py \
+            --endpoint-name "$ENDPOINT_NAME" \
+            --deployment-name "$DEPLOYMENT_NAME"
 
       - name: Delete endpoint after one hour to control costs
         run: |
           echo "Sleeping for one hour before deleting endpoint $ENDPOINT_NAME"
           sleep 3600
-          python deploy/manage_online_endpoint.py delete "$ENDPOINT_NAME"
+          fraud-cli endpoint-delete --name "$ENDPOINT_NAME"

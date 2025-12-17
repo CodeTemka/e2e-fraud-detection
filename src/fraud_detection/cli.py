@@ -240,6 +240,16 @@ def register_best_automl_model(
         list[str] | None,
         typer.Option("--experiment", "-e", help="Experiment(s) to process. Can be passed multiple times."),
     ] = None,
+    model_name: Annotated[
+        str | None,
+        typer.Option(
+            "--model-name",
+            help=(
+                "Optional stable model name to use instead of slugified experiment names. "
+                "Useful for CD pipelines."
+            ),
+        ),
+    ] = None,
 ):
     """Register the best child run for each completed AutoML parent job (versioned per experiment)."""
     settings = get_settings().require_azure()
@@ -258,6 +268,7 @@ def register_best_automl_model(
             ml_client,
             job_name=job_name,
             experiment_name=experiment_name,
+            model_name=model_name,
         )
         if isinstance(model, Model):
             typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")

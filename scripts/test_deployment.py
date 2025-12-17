@@ -1,5 +1,10 @@
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+
+import typer
+from azure.core.exceptions import ResourceNotFoundError
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT_DIR / "src"
@@ -12,13 +17,43 @@ from fraud_detection.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
-ml_client = get_ml_client()
-endpoint_names = [endpoint.name for endpoint in ml_client.online_endpoints.list()]
+DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
 
-response = ml_client.online_endpoints.invoke(
-    endpoint_name=endpoint_names[0],
-    deployment_name="blue",
-    request_file=Path("json") / "sample_request.json",
-)
+app = typer.Typer(help="Smoke test a managed online endpoint deployment.")
 
-logger.info("%s", response)
+
+@app.command()
+def invoke(
+    endpoint_name: str = typer.Option(..., "--endpoint-name", help="Endpoint to call"),
+    deployment_name: str = typer.Option("blue", "--deployment-name", help="Deployment slot name"),
+    request_file: Path = typer.Option(
+        DEFAULT_REQUEST_FILE,
+        "--request-file",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to JSON request payload",
+    ),
+) -> None:
+    """Invoke the endpoint and log the response."""
+
+    ml_client = get_ml_client()
+    try:
+        ml_client.online_endpoints.get(endpoint_name)
+    except ResourceNotFoundError as exc:  # pragma: no cover - runtime safeguard
+        raise typer.BadParameter(f"Endpoint '{endpoint_name}' does not exist") from exc
+
+    logger.info(
+        "Invoking endpoint", extra={"endpoint_name": endpoint_name, "deployment_name": deployment_name}
+    )
+    response = ml_client.online_endpoints.invoke(
+        endpoint_name=endpoint_name,
+        deployment_name=deployment_name,
+        request_file=request_file,
+    )
+
+    logger.info("Invocation response: %s", response)
+
+
+if __name__ == "__main__":
+    app()
