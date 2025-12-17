@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
@@ -56,7 +56,10 @@ def register_model_from_run(
     """
     existing = find_existing_version_for_run(ml_client, model_name=model_name, run_id=run_id)
     if existing is not None:
-        logger.info("Model version already exists for run", extra={"model_name": model_name, "version": existing, "run_id": run_id})
+        logger.info(
+            "Model version already exists for run",
+            extra={"model_name": model_name, "version": existing, "run_id": run_id},
+        )
         return ml_client.models.get(name=model_name, version=existing)
 
     candidates = list(artifact_paths) if artifact_paths else list(DEFAULT_MLFLOW_MODEL_ARTIFACT_CANDIDATES)
@@ -78,11 +81,18 @@ def register_model_from_run(
                     },
                 )
             )
-            logger.info("Registered model", extra={"model_name": model.name, "version": model.version, "run_id": run_id, "artifact_path": ap})
+            logger.info(
+                "Registered model",
+                extra={"model_name": model.name, "version": model.version, "run_id": run_id, "artifact_path": ap},
+            )
             return model
         except Exception as exc:
             last_exc = exc
-            logger.warning("Failed to register using artifact path; trying next", extra={"run_id": run_id, "artifact_path": ap}, exc_info=exc)
+            logger.warning(
+                "Failed to register using artifact path; trying next",
+                extra={"run_id": run_id, "artifact_path": ap},
+                exc_info=exc,
+            )
 
     raise RuntimeError(
         f"Could not register model '{model_name}' from run/job '{run_id}'. "

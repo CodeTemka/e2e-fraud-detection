@@ -28,7 +28,7 @@ def get_ml_client(
     Returns:
         An Azure ML client.
     """
-    
+
     resolved_settings = (settings or get_settings()).require_azure()
     resolved_credential = credential or build_default_credential()
 

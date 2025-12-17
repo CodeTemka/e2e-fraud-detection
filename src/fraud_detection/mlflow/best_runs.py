@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import mlflow
-import pandas as pd
 from mlflow.entities import Experiment, ViewType
 
 from azure.ai.ml import MLClient
