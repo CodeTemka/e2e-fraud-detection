@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from azure.core.exceptions import ResourceNotFoundError
@@ -24,16 +25,20 @@ app = typer.Typer(help="Smoke test a managed online endpoint deployment.")
 
 @app.command()
 def invoke(
-    endpoint_name: str = typer.Option(..., "--endpoint-name", help="Endpoint to call"),
-    deployment_name: str = typer.Option("blue", "--deployment-name", help="Deployment slot name"),
-    request_file: Path = typer.Option(
-        DEFAULT_REQUEST_FILE,
-        "--request-file",
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to JSON request payload",
-    ),
+    endpoint_name: Annotated[str, typer.Option("--endpoint-name", help="Endpoint to call")],
+    deployment_name: Annotated[
+        str, typer.Option("--deployment-name", help="Deployment slot name")
+    ] = "blue",
+    request_file: Annotated[
+        Path,
+        typer.Option(
+            "--request-file",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to JSON request payload",
+        ),
+    ] = DEFAULT_REQUEST_FILE,
 ) -> None:
     """Invoke the endpoint and log the response."""
 

@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from typer.testing import CliRunner
 
 from fraud_detection import cli

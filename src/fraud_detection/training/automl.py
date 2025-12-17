@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics

@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from fraud_detection import cli
-from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 from fraud_detection.registry.automl_model_registry import list_completed_jobs
+from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 
 runner = CliRunner()
 

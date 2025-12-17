@@ -1,7 +1,3 @@
-from types import SimpleNamespace
-
-import pytest
-
 from fraud_detection.azure import client
 
 
