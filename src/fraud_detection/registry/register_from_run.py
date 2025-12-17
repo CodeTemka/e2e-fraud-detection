@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
