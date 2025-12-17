@@ -9,8 +9,11 @@ def test_settings_loads_env(monkeypatch):
     monkeypatch.setenv("SUBSCRIPTION_ID", "sub-id")
     monkeypatch.setenv("RESOURCE_GROUP", "rg")
     monkeypatch.setenv("WORKSPACE_NAME", "ws")
+    monkeypatch.setenv("LOCATION", "eastus")
     monkeypatch.setenv("AML_COMPUTE", "cpu-cluster")
     monkeypatch.setenv("AML_DATASET", "azureml:dataset:1")
+    monkeypatch.setenv("GITHUB_OWNER", "octocat")
+    monkeypatch.setenv("GITHUB_REPO", "fraud")
 
     importlib.reload(config)
     config.get_settings.cache_clear()
@@ -19,14 +22,17 @@ def test_settings_loads_env(monkeypatch):
     assert settings.subscription_id == "sub-id"
     assert settings.resource_group == "rg"
     assert settings.workspace_name == "ws"
-    assert settings.default_compute == "cpu-cluster"
-    assert settings.default_dataset == "azureml:dataset:1"
+    assert settings.aml_compute == "cpu-cluster"
+    assert settings.aml_dataset == "azureml:dataset:1"
 
 
 def test_settings_allows_missing_azure_env(monkeypatch):
     monkeypatch.delenv("SUBSCRIPTION_ID", raising=False)
     monkeypatch.delenv("RESOURCE_GROUP", raising=False)
     monkeypatch.delenv("WORKSPACE_NAME", raising=False)
+    monkeypatch.delenv("LOCATION", raising=False)
+    monkeypatch.setenv("GITHUB_OWNER", "octocat")
+    monkeypatch.setenv("GITHUB_REPO", "fraud")
 
     importlib.reload(config)
     config.get_settings.cache_clear()
