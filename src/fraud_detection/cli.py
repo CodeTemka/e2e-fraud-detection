@@ -32,8 +32,10 @@ from fraud_detection.serving.online_endpoint import (
     deploy_model,
     update_traffic,
 )
+from fraud_detection.cli_serve import serve_app
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
+app.add_typer(serve_app, name="serve")
 
 DEFAULT_AUTOML_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY]
 
