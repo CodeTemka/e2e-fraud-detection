@@ -3,8 +3,9 @@ name = "e2e-fraud-detection"
 version = "0.1.0"
 description = "End-to-end fraud detection workflows powered by Azure ML"
 readme = "README.md"
-authors = [{name = "Fraud Detection Team"}]
 requires-python = ">=3.10"
+authors = [{ name = "Fraud Detection Team" }]
+
 dependencies = [
   "azure-ai-ml>=1.20.0",
   "azure-identity>=1.17.0",
@@ -16,9 +17,9 @@ dependencies = [
   "scikit-learn>=1.4.0",
   "lightgbm>=4.5.0",
   "python-dotenv>=1.0.1",
+  "pydantic>=2.6.0",
   "pydantic-settings>=2.6.0",
   "typer>=0.12.5",
-  "pydantic>=2.6.0",
 ]
 
 [project.optional-dependencies]
@@ -33,9 +34,24 @@ dev = [
 [project.scripts]
 fraud-cli = "fraud_detection.cli:run"
 
+# ✅ IMPORTANT for src/ layout:
+# Tell setuptools that packages live under ./src
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["fraud_detection*"]
+
+# If you have non-.py files inside the package you want included at install time,
+# uncomment the next line and add a MANIFEST.in or use tool.setuptools.package-data.
+# include-package-data = true
+
+
 [build-system]
 requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
+
 
 [tool.ruff]
 line-length = 100
