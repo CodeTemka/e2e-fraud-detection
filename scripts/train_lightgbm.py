@@ -8,7 +8,12 @@ from pathlib import Path
 import lightgbm as lgb
 import mlflow
 import pandas as pd
-from sklearn.metrics import auc, classification_report, confusion_matrix, precision_recall_curve
+from sklearn.metrics import (
+    auc,
+    classification_report,
+    confusion_matrix,
+    precision_recall_curve,
+)
 from sklearn.model_selection import train_test_split
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -18,6 +23,7 @@ for path in (SRC_DIR, ROOT_DIR):
         sys.path.insert(0, str(path))
 
 from fraud_detection.data_validation import validate_creditcard_data  # noqa: E402
+
 from fraud_detection.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)

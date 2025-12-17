@@ -9,22 +9,17 @@ import typer
 from azure.ai.ml.entities import Model
 
 from fraud_detection.azure.client import get_ml_client
+from fraud_detection.cli_serve import serve_app
 from fraud_detection.config import get_settings
 from fraud_detection.data.data_validation import (
     DataValidationError,
     ValidationOptions,
     validate_creditcard_data,
 )
-from fraud_detection.training.automl import (
-    AutoMLJobConfig,
-    create_automl_job,
-    accuracy_job,
-    recall_job,
-    submit_job,
-    EXPERIMENT_ACCURACY,
-    EXPERIMENT_RECALL,
+from fraud_detection.registry.automl_model_registry import (
+    list_completed_jobs,
+    register_best_child_run,
 )
-from fraud_detection.registry.automl_model_registry import list_completed_jobs, register_best_child_run
 from fraud_detection.serving.deploy_latest_model import deploy_latest_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
@@ -32,7 +27,15 @@ from fraud_detection.serving.online_endpoint import (
     deploy_model,
     update_traffic,
 )
-from fraud_detection.cli_serve import serve_app
+from fraud_detection.training.automl import (
+    EXPERIMENT_ACCURACY,
+    EXPERIMENT_RECALL,
+    AutoMLJobConfig,
+    accuracy_job,
+    create_automl_job,
+    recall_job,
+    submit_job,
+)
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 app.add_typer(serve_app, name="serve")
@@ -124,7 +127,7 @@ def validate_data(
             sample_rows=sample_rows,
         )
     except (FileNotFoundError, ValueError, DataValidationError) as e:
-        raise typer.BadParameter(str(e))
+        raise typer.BadParameter(str(e)) from e
 
     typer.echo("✅ Data validation passed.")
 
@@ -182,9 +185,11 @@ def submit_automl(
     compute_target = compute or settings.aml_compute
 
     if not training_data:
-        raise typer.BadParameter("Provide --dataset or set AML_DATASET.")
+        typer.echo("Provide --dataset or set AML_DATASET.", err=True)
+        raise typer.Exit(code=1)
     if not compute_target:
-        raise typer.BadParameter("Provide --compute or set AML_COMPUTE.")
+        typer.echo("Provide --compute or set AML_COMPUTE.", err=True)
+        raise typer.Exit(code=1)
 
     # Optional: local validation preflight
     if validate_local:
@@ -204,7 +209,7 @@ def submit_automl(
                 sample_rows=sample_rows,
             )
         except (FileNotFoundError, ValueError, DataValidationError) as e:
-            raise typer.BadParameter(f"Local data validation failed: {e}")
+            raise typer.BadParameter(f"Local data validation failed: {e}") from e
 
         typer.echo("✅ Local data validation passed. Submitting AutoML job...")
 
@@ -240,6 +245,16 @@ def register_best_automl_model(
         list[str] | None,
         typer.Option("--experiment", "-e", help="Experiment(s) to process. Can be passed multiple times."),
     ] = None,
+    model_name: Annotated[
+        str | None,
+        typer.Option(
+            "--model-name",
+            help=(
+                "Optional stable model name to use instead of slugified experiment names. "
+                "Useful for CD pipelines."
+            ),
+        ),
+    ] = None,
 ):
     """Register the best child run for each completed AutoML parent job (versioned per experiment)."""
     settings = get_settings().require_azure()
@@ -258,6 +273,7 @@ def register_best_automl_model(
             ml_client,
             job_name=job_name,
             experiment_name=experiment_name,
+            model_name=model_name,
         )
         if isinstance(model, Model):
             typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")
@@ -296,12 +312,13 @@ def endpoint_delete(
 
 @app.command()
 def endpoint_traffic(
-    endpoint: str = typer.Option(..., "--endpoint", help="Endpoint name"),
-    traffic: list[str] = typer.Option(
-        ...,
-        "--traffic",
-        help="Traffic mapping like blue=100 green=0 (repeatable)",
-    ),
+    endpoint: Annotated[str, typer.Option("--endpoint", help="Endpoint name")],
+    traffic: Annotated[
+        list[str],
+        typer.Option(
+            "--traffic", help="Traffic mapping like blue=100 green=0 (repeatable)"
+        ),
+    ],
 ):
     """Update endpoint traffic split. Traffic must sum to 100."""
     settings = get_settings().require_azure()
@@ -315,8 +332,10 @@ def endpoint_traffic(
         dep = dep.strip()
         try:
             mapping[dep] = int(pct)
-        except ValueError:
-            raise typer.BadParameter(f"Invalid percent '{pct}' for deployment '{dep}'.")
+        except ValueError as exc:
+            raise typer.BadParameter(
+                f"Invalid percent '{pct}' for deployment '{dep}'."
+            ) from exc
 
     update_traffic(ml_client, endpoint_name=endpoint, traffic=mapping)
     typer.echo(f"Updated traffic for endpoint '{endpoint}': {mapping}")

@@ -5,7 +5,7 @@ from azure.core.exceptions import ResourceNotFoundError
 
 from fraud_detection.mlflow.best_runs import BestRun, ViewType, best_run_by_metric
 from fraud_detection.registry.register_from_run import register_model_from_run
-from fraud_detection.serving.online_endpoint import ensure_endpoint, deploy_model, update_traffic
+from fraud_detection.serving.online_endpoint import deploy_model, ensure_endpoint, update_traffic
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)

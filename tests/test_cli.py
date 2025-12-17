@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from typer.testing import CliRunner
 
 from fraud_detection import cli
@@ -20,8 +18,8 @@ def test_register_models_accepts_custom_experiments(monkeypatch):
         captured["experiments"] = list(experiments)
         return {"job-123": "custom-experiment"}
 
-    def _register_best_child_run(_ml_client, job_name, experiment_name):
-        captured.setdefault("registrations", []).append((job_name, experiment_name))
+    def _register_best_child_run(_ml_client, job_name, experiment_name, model_name=None):
+        captured.setdefault("registrations", []).append((job_name, experiment_name, model_name))
         return None
 
     monkeypatch.setattr(cli, "list_completed_jobs", _list_completed_jobs)
@@ -33,7 +31,7 @@ def test_register_models_accepts_custom_experiments(monkeypatch):
 
     assert result.exit_code == 0
     assert captured["experiments"] == ["automl-fraud-accuracy"]
-    assert captured["registrations"] == [("job-123", "custom-experiment")]
+    assert captured["registrations"] == [("job-123", "custom-experiment", None)]
     assert "Processing experiments: automl-fraud-accuracy" in result.output
     assert "Skipped registration for job 'job-123'." in result.output
 

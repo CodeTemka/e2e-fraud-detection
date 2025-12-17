@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import mlflow
+from azure.ai.ml import MLClient
 from mlflow.entities import Experiment, ViewType
 
-from azure.ai.ml import MLClient
 from fraud_detection.mlflow.tracking import set_tracking_uri_from_workspace
 from fraud_detection.utils.logging import get_logger
 

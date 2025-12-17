@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 from mlflow.entities import ViewType
 
@@ -12,48 +14,54 @@ serve_app = typer.Typer(help="Serving operations (managed online endpoints).")
 
 @serve_app.command("deploy")
 def deploy(
-    endpoint: str = typer.Option(..., "--endpoint", help="Endpoint name"),
-    deployment: str = typer.Option("blue", "--deployment", help="Deployment slot name"),
-    model_name: str = typer.Option(..., "--model-name", help="Azure ML registered model name"),
-    strategy: str = typer.Option(
-        "latest",
-        "--strategy",
-        help="Selection strategy: 'latest' or 'best'",
-        case_sensitive=False,
-    ),
+    endpoint: Annotated[str, typer.Option("--endpoint", help="Endpoint name")],
+    model_name: Annotated[str, typer.Option("--model-name", help="Azure ML registered model name")],
+    deployment: Annotated[str, typer.Option("--deployment", help="Deployment slot name")] = "blue",
+    strategy: Annotated[
+        str, typer.Option("--strategy", help="Selection strategy: 'latest' or 'best'", case_sensitive=False)
+    ] = "latest",
     # best-strategy options
-    metric: str = typer.Option(
-        None,
-        "--metric",
-        help="Metric for --strategy best (e.g. norm_macro_recall or metrics.norm_macro_recall)",
-    ),
-    direction: str = typer.Option("max", "--direction", help="'max' or 'min'", case_sensitive=False),
-    experiment_prefix: list[str] = typer.Option(
-        ["automl-fraud"],
-        "--experiment-prefix",
-        help="Experiment name prefix to search (repeatable). Example: --experiment-prefix automl-fraud",
-    ),
-    artifact_path: list[str] = typer.Option(
-        None,
-        "--artifact-path",
-        help=(
-            "Artifact path candidate(s) under azureml://jobs/<run_id>/... "
-            "Repeat to provide fallbacks. If omitted, defaults are tried."
+    metric: Annotated[
+        str | None,
+        typer.Option(
+            "--metric",
+            help="Metric for --strategy best (e.g. norm_macro_recall or metrics.norm_macro_recall)",
         ),
-    ),
-    filter_string: str = typer.Option("", "--filter", help="MLflow filter_string for run search"),
-    view: str = typer.Option("active", "--view", help="active|all", case_sensitive=False),
-    max_results: int = typer.Option(5000, "--max-results", help="Max runs to consider", min=1),
+    ] = None,
+    direction: Annotated[str, typer.Option("--direction", help="'max' or 'min'", case_sensitive=False)] = "max",
+    experiment_prefix: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--experiment-prefix",
+            help="Experiment name prefix to search (repeatable). Example: --experiment-prefix automl-fraud",
+        ),
+    ] = None,
+    artifact_path: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--artifact-path",
+            help=(
+                "Artifact path candidate(s) under azureml://jobs/<run_id>/... "
+                "Repeat to provide fallbacks. If omitted, defaults are tried."
+            ),
+        ),
+    ] = None,
+    filter_string: Annotated[str, typer.Option("--filter", help="MLflow filter_string for run search")] = "",
+    view: Annotated[str, typer.Option("--view", help="active|all", case_sensitive=False)] = "active",
+    max_results: Annotated[int, typer.Option("--max-results", help="Max runs to consider", min=1)] = 5000,
     # deployment options
-    instance_type: str = typer.Option("Standard_E4s_v3", "--instance-type", help="VM SKU"),
-    instance_count: int = typer.Option(1, "--instance-count", help="Instance count", min=1),
-    traffic_100: bool = typer.Option(True, "--traffic-100/--no-traffic-100", help="Send 100% traffic to this deployment"),
+    instance_type: Annotated[str, typer.Option("--instance-type", help="VM SKU")] = "Standard_E4s_v3",
+    instance_count: Annotated[int, typer.Option("--instance-count", help="Instance count", min=1)] = 1,
+    traffic_100: Annotated[
+        bool, typer.Option("--traffic-100/--no-traffic-100", help="Send 100% traffic to this deployment")
+    ] = True,
 ):
     """Deploy either the latest registered model version OR the best-by-metric run (register+deploy)."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
 
     strategy_l = strategy.lower()
+    prefixes = list(experiment_prefix) if experiment_prefix else ["automl-fraud"]
     if strategy_l == "latest":
         version, dep = deploy_latest_model(
             ml_client,
@@ -78,7 +86,7 @@ def deploy(
             model_name=model_name,
             endpoint_name=endpoint,
             deployment_name=deployment,
-            experiment_prefixes=list(experiment_prefix),
+            experiment_prefixes=prefixes,
             metric=metric,
             direction=direction.lower(),
             artifact_paths=list(artifact_path) if artifact_path else None,

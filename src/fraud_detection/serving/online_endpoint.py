@@ -1,4 +1,4 @@
-"""Serving utilities for Azure ML managed online endpoints."""
+"""Helpers for Azure ML managed online endpoints."""
 from __future__ import annotations
 
 from collections.abc import Mapping
