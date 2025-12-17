@@ -1,8 +1,8 @@
 """Serving utilities for Azure ML managed online endpoints."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
@@ -144,3 +144,15 @@ def _validate_traffic(traffic: dict[str, int]) -> None:
     total = sum(traffic.values())
     if total != 100:
         raise ValueError(f"traffic must sum to 100, got {total}")
+
+
+__all__ = [
+    "DeploymentSpec",
+    "get_endpoint",
+    "create_endpoint",
+    "ensure_endpoint",
+    "delete_endpoint",
+    "deploy_model",
+    "update_traffic",
+    "DEFAULT_AUTH_MODE",
+]
