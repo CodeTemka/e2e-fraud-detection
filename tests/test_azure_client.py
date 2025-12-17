@@ -1,6 +1,5 @@
 from fraud_detection.azure import client
 
-
 class DummySettings:
     def __init__(self):
         self.subscription_id = "sub-id"
