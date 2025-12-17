@@ -1,107 +1,99 @@
-"""Configuration management for the fraud detection project."""
+""" Configuration settings for the fraud detection module. """
 from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
-    """Application-wide settings loaded from environment variables."""
+    """ Application wide settings loaded from environment variables. """
 
+    model_config = SettingsConfigDict(
+        env_file=[ROOT_DIR / ".env", ROOT_DIR / ".env.generated"],
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",  # ignore unknown env vars instead of erroring
+    )
+    
+    # Azure
     subscription_id: str | None = Field(None, alias="SUBSCRIPTION_ID")
     resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
     workspace_name: str | None = Field(None, alias="WORKSPACE_NAME")
-    default_compute: str = Field(
-        "automated-ml-cluster",
-        alias="AML_COMPUTE",
-        description="Default compute target used for Azure ML jobs.",
-    )
-    default_dataset: str | None = Field(
-        "azureml:mltable_creditcard_data:1",
-        alias="AML_DATASET",
-        description="Default MLTable asset for training jobs.",
-    )
-    github_token: str | None = Field(
-        None,
-        alias="GITHUB_TOKEN",
-        description="Optional GitHub token used by helper scripts.",
-    )
-    github_owner: str | None = Field(
-        None,
-        alias="GITHUB_OWNER",
-        description="Optional GitHub repository owner for automation scripts.",
-    )
-    github_repo: str | None = Field(
-        None,
-        alias="GITHUB_REPO",
-        description="Optional GitHub repository name for automation scripts.",
-    )
-    instance_type: str | None = Field(
-        None,
-        alias="INSTANCE_TYPE",
-        description="Optional default instance SKU for endpoint deployments.",
-    )
-    instance_count: int | None = Field(
-        None,
-        alias="INSTANCE_COUNT",
-        description="Optional default instance count for endpoint deployments.",
-    )
-    kaggle_username: str | None = Field(
-        None,
-        alias="KAGGLE_USERNAME",
-        description="Optional Kaggle username when downloading datasets.",
-    )
-    kaggle_key: str | None = Field(
-        None,
-        alias="KAGGLE_KEY",
-        description="Optional Kaggle API key when downloading datasets.",
-    )
-    location: str | None = Field(
-        None,
-        alias="LOCATION",
-        description="Optional Azure region to target for resource creation.",
-    )
+    location: str | None = Field(None, alias="LOCATION")
+    aml_compute: str | None = Field(None, alias="AML_COMPUTE")
+    aml_dataset: str | None = Field(None, alias="AML_DATASET")
 
-    @model_validator(mode="after")
-    def validate_dataset(self) -> Settings:
-        """Ensure a default dataset is configured for training jobs."""
+    # Github
+    github_token: str | None = Field(None, alias="GITHUB_TOKEN")
+    github_owner: str = Field(None, alias="GITHUB_OWNER")
+    github_repo: str = Field(None, alias="GITHUB_REPO")
 
-        if not self.default_dataset:
-            msg = "Set AML_DATASET to the MLTable asset used for training jobs."
-            raise ValueError(msg)
-        return self
+    # Kaggle
+    kaggle_username: str | None = Field(None, alias="KAGGLE_USERNAME")
+    kaggle_key: str | None = Field(None, alias="KAGGLE_KEY")
 
-    def require_azure(self) -> Settings:
-        """Ensure Azure-specific settings are present before use."""
+    def _require(self, required: dict[str, str], *, context: str) -> Settings:
+        """ Internal helper to enforce required settings. """
 
-        required = {
-            "subscription_id": "SUBSCRIPTION_ID",
-            "resource_group": "RESOURCE_GROUP",
-            "workspace_name": "WORKSPACE_NAME",
-        }
         missing = [env for attr, env in required.items() if not getattr(self, attr)]
 
         if missing:
-            env_list = ", ".join(missing)
-            msg = f"Missing Azure configuration. Set environment variables: {env_list}."
-            raise ValueError(msg)
-
+            raise ValueError(
+                f"Missing required environment variables for {context}: {', '.join(missing)}"
+            )
         return self
+    
+    def require_azure(self) -> Settings:
+        """ Ensure Azure-specific settings are provided. """
+        return self._require(
+            {
+                "subscription_id": "SUBSCRIPTION_ID",
+                "resource_group": "RESOURCE_GROUP",
+                "workspace_name": "WORKSPACE_NAME",
+                "location": "LOCATION",
+            },
+            context="Azure",
+        )
+    
+    def require_github(self) -> Settings:
+        """ Ensure Github-specific settings are provided. """
+        return self._require(
+            {
+                "github_token": "GITHUB_TOKEN",
+                "github_owner": "GITHUB_OWNER",
+                "github_repo": "GITHUB_REPO",
+            },
+            context="Github",
+        )
+    
+    def require_kaggle(self) -> Settings:
+        """ Ensure Kaggle-specific settings are provided. """
+        return self._require(
+            {
+                "kaggle_username": "KAGGLE_USERNAME",
+                "kaggle_key": "KAGGLE_KEY",
+            },
+            context="Kaggle",
+        )
+    
+    def require_training(self) -> Settings:
+        """ Ensure all settings required for training are provided. """
+        return self._require(
+            {
+                "aml_compute": "AML_COMPUTE",
+                "aml_dataset": "AML_DATASET",
+            },
+            context="Training",
+        )
 
-    class Config:
-        env_file = Path(__file__).resolve().parents[2] / ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
-
-@lru_cache
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Load settings once and cache the result."""
+    """ Get the application settings with caching. """
+    return Settings()
 
-    return Settings()  # type: ignore[call-arg]
 
-
-__all__ = ["Settings", "get_settings"]
+__all__ = ["get_settings", "Settings"]

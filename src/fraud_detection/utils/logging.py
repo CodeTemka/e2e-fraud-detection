@@ -7,6 +7,13 @@ _LOGGER_NAME = "fraud_detection"
 
 
 def get_logger(name: str | None = None) -> logging.Logger:
+    """Get a logger for the fraud detection module.
+
+    Args:
+        name: The name of the logger. If not provided, the root fraud_detection logger will be used.
+    Returns:
+        A configured logger instance.
+    """
     logger_name = name or _LOGGER_NAME
     logger = logging.getLogger(logger_name)
 
@@ -20,6 +27,5 @@ def get_logger(name: str | None = None) -> logging.Logger:
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
     return logger
-
 
 __all__ = ["get_logger"]

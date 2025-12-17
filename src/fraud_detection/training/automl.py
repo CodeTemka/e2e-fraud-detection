@@ -1,10 +1,12 @@
 """Opinionated helpers to submit Azure AutoML jobs."""
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
@@ -15,32 +17,81 @@ from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Stable experiment names per metric (NOT tied to a specific algorithm)
+EXPERIMENT_RECALL = "automl-fraud-recall"
+EXPERIMENT_ACCURACY = "automl-fraud-accuracy"
+
+
+def _slug(s: str) -> str:
+    """Make a string safe for Azure ML names (lowercase, hyphen-separated)."""
+    s = (s or "").lower().strip()
+    s = s.replace("_", "-")
+    s = re.sub(r"[^a-z0-9-]+", "-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    return s or "job"
+
+
+def _get_git_sha() -> str:
+    """Return the current git commit SHA for tagging experiments (best-effort)."""
+    try:
+        cp = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        sha = cp.stdout.strip()
+        return sha or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _build_job_name(metric: str) -> str:
+    """Build a unique job name based on metric, timestamp, and git sha."""
+    stamp = datetime.now(timezone.utc).strftime("%m%d-%H%M")
+    short_sha = _get_git_sha()[:5]
+    return _slug(f"{metric}-{stamp}-{short_sha}")
+
 
 @dataclass
 class AutoMLJobConfig:
-    """Configuration for submitting a classification AutoML job."""
+    """Configuration for an AutoML classification job."""
 
     experiment_name: str
-    target_column: str
     primary_metric: ClassificationPrimaryMetrics | str
     compute: str
     training_data: str
+
+    target_column: str = "Class"
     cross_validations: int = 5
+
     tags: dict[str, str] = field(default_factory=dict)
-    allowed_algorithms: Iterable[str] | None = None
+    allowed_algorithms: Iterable[str] | None = None  # None => AutoML chooses
+
     timeout_minutes: int = 480
     trial_timeout_minutes: int = 60
     max_trials: int = 20
     max_concurrent_trials: int = 2
     enable_early_termination: bool = True
 
+    job_name: str | None = None
 
-def create_automl_job(config: AutoMLJobConfig):
+
+def create_automl_job(config: AutoMLJobConfig) -> Any:
     """Create a configured AutoML classification job."""
+    if not config.training_data:
+        raise ValueError("config.training_data is empty. Provide an MLTable asset path/ID/URI.")
+    if not config.compute:
+        raise ValueError("config.compute is empty. Provide an Azure ML compute target name.")
+    if not config.experiment_name:
+        raise ValueError("config.experiment_name is empty.")
+    if not config.target_column:
+        raise ValueError("config.target_column is empty.")
 
     logger.info("Preparing AutoML job", extra={"experiment": config.experiment_name})
 
     data_input = Input(type=AssetTypes.MLTABLE, path=config.training_data)
+
     job = automl.classification(
         compute=config.compute,
         experiment_name=config.experiment_name,
@@ -56,90 +107,85 @@ def create_automl_job(config: AutoMLJobConfig):
         timeout_minutes=config.timeout_minutes,
         trial_timeout_minutes=config.trial_timeout_minutes,
         max_trials=config.max_trials,
-        enable_early_termination=config.enable_early_termination,
         max_concurrent_trials=config.max_concurrent_trials,
+        enable_early_termination=config.enable_early_termination,
     )
 
+    # If allowed_algorithms is provided, restrict training algorithms.
+    # If None/empty => AutoML tries its default algorithm set.
     if config.allowed_algorithms:
         job.set_training(allowed_training_algorithms=list(config.allowed_algorithms))
 
+    desired_name = config.job_name or _build_job_name(metric=str(config.primary_metric))
+    job.name = _slug(desired_name)
     return job
 
 
-def submit_job(ml_client: MLClient, job) -> str:
+def submit_job(ml_client: MLClient, job: Any) -> str:
     """Submit a job and return the created job name."""
-
     returned_job = ml_client.jobs.create_or_update(job)
-    logger.info("Submitted job", extra={"job_name": returned_job.name})
+    logger.info("Submitted AutoML job", extra={"job_name": returned_job.name})
     return returned_job.name
 
 
-def lightgbm_recall_job(settings: Settings) -> AutoMLJobConfig:
-    """Preconfigured job optimized for recall on the fraud dataset."""
-
+def accuracy_job(
+    settings: Settings,
+    *,
+    training_data: str,
+    compute: str,
+    allowed_algorithms: list[str] | None = None,
+) -> AutoMLJobConfig:
+    """Preconfigured job optimized for accuracy (optionally restrict algorithms)."""
     return AutoMLJobConfig(
-        experiment_name=_build_experiment_name(metric="recall"),
-        target_column="Class",
-        primary_metric="norm_macro_recall",
-        compute=settings.default_compute,
-        training_data=settings.default_dataset or "",
-        cross_validations=10,
-        tags={
-            "project": "e2e-fraud-detection",
-            "metric": "recall",
-            "git_sha": _get_git_sha(),
-        },
-        max_trials=40,
-        max_concurrent_trials=4,
-    )
-
-
-def lightgbm_accuracy_job(settings: Settings) -> AutoMLJobConfig:
-    """Preconfigured job optimized for accuracy with only LightGBM allowed."""
-
-    return AutoMLJobConfig(
-        experiment_name=_build_experiment_name(metric="accuracy"),
-        target_column="Class",
+        experiment_name=EXPERIMENT_ACCURACY,
         primary_metric=ClassificationPrimaryMetrics.ACCURACY,
-        compute=settings.default_compute,
-        training_data=settings.default_dataset or "",
+        compute=compute,
+        training_data=training_data,
         cross_validations=5,
-        allowed_algorithms=["LightGBM"],
+        allowed_algorithms=allowed_algorithms,
         tags={
-            "project": "e2e-fraud-detection",
+            "project": "fraud-detection",
             "metric": "accuracy",
             "git_sha": _get_git_sha(),
-            "model": "LightGBM",
+            "allowed_algorithms": ",".join(allowed_algorithms) if allowed_algorithms else "auto",
         },
         max_trials=80,
-        max_concurrent_trials=4,
+        job_name=_build_job_name(metric="accuracy"),
     )
 
 
-def _build_experiment_name(metric: str) -> str:
-    """Create a descriptive experiment name for Azure AutoML runs."""
-
-    date_stamp = datetime.now().strftime("%Y%m%d")
-    short_git_commit = _get_git_sha()[:7]
-    return f"fraud-automl-{metric}-{date_stamp}-{short_git_commit}"
-
-
-def _get_git_sha() -> str:
-    """Return the current git commit SHA for tagging experiments."""
-
-    completed_process = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
+def recall_job(
+    settings: Settings,
+    *,
+    training_data: str,
+    compute: str,
+    allowed_algorithms: list[str] | None = None,
+) -> AutoMLJobConfig:
+    """Preconfigured job optimized for norm-macro-recall (optionally restrict algorithms)."""
+    return AutoMLJobConfig(
+        experiment_name=EXPERIMENT_RECALL,
+        primary_metric="norm_macro_recall",
+        compute=compute,
+        training_data=training_data,
+        cross_validations=5,
+        allowed_algorithms=allowed_algorithms,
+        tags={
+            "project": "fraud-detection",
+            "metric": "recall",
+            "git_sha": _get_git_sha(),
+            "allowed_algorithms": ",".join(allowed_algorithms) if allowed_algorithms else "auto",
+        },
+        max_trials=80,
+        job_name=_build_job_name(metric="recall"),
     )
-    return completed_process.stdout.strip()
 
 
 __all__ = [
     "AutoMLJobConfig",
     "create_automl_job",
     "submit_job",
-    "lightgbm_recall_job",
-    "lightgbm_accuracy_job",
+    "accuracy_job",
+    "recall_job",
+    "EXPERIMENT_RECALL",
+    "EXPERIMENT_ACCURACY",
 ]

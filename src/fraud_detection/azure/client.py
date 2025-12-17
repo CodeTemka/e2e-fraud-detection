@@ -19,8 +19,16 @@ def build_default_credential() -> DefaultAzureCredential:
 def get_ml_client(
     *, settings: Settings | None = None, credential: DefaultAzureCredential | None = None
 ) -> MLClient:
-    """Instantiate an :class:`~azure.ai.ml.MLClient` using project settings."""
+    """Get an Azure ML client.
 
+    Args:
+        settings: The application settings. If not provided, the default settings will be used.
+        credential: The Azure credentials. If not provided, the default credentials will be used.
+
+    Returns:
+        An Azure ML client.
+    """
+    
     resolved_settings = (settings or get_settings()).require_azure()
     resolved_credential = credential or build_default_credential()
 
@@ -29,11 +37,11 @@ def get_ml_client(
         extra={
             "subscription_id": resolved_settings.subscription_id,
             "resource_group": resolved_settings.resource_group,
-            "workspace": resolved_settings.workspace_name,
+            "workspace_name": resolved_settings.workspace_name,
         },
     )
 
-    return MLClient(  # type: ignore[call-arg]
+    return MLClient(
         credential=resolved_credential,
         subscription_id=resolved_settings.subscription_id,
         resource_group_name=resolved_settings.resource_group,
