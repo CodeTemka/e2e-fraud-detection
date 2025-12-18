@@ -1,6 +1,8 @@
 name: CD - Deploy to Azure ML
 
 on:
+  # Manual trigger
+  workflow_dispatch:
   workflow_run:
     workflows: ["CI"]        # must match the name: CI
     types:
@@ -19,8 +21,11 @@ jobs:
     # - CI concluded successfully
     # - The ref (branch/tag) name starts with "v" → version tag
     if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        startsWith(github.event.workflow_run.head_branch, 'v')
+      ) || github.event_name == 'workflow_dispatch'
 
     env:
       # Azure authentication (service principal)
@@ -49,7 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Checkout the exact commit that CI ran on
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
