@@ -7,12 +7,13 @@ from collections.abc import Iterable
 import mlflow
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Model
-from mlflow.tracking import MlflowClient
+from mlflow.tracking.client import TrackingServiceClient
 
 from fraud_detection.registry.register_from_run import (
     DEFAULT_MLFLOW_MODEL_ARTIFACT_CANDIDATES,
     register_model_from_run,
 )
+from fraud_detection.mlflow.tracking import normalize_tracking_uri
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -77,7 +78,8 @@ def register_best_child_run(
     """
     # Configure MLflow to point at the workspace tracking server
     try:
-        tracking_uri = ml_client.workspaces.get(ml_client.workspace_name).mlflow_tracking_uri
+        raw_tracking_uri = ml_client.workspaces.get(ml_client.workspace_name).mlflow_tracking_uri
+        tracking_uri = normalize_tracking_uri(raw_tracking_uri)
         mlflow.set_tracking_uri(tracking_uri)
     except Exception as exc:
         logger.exception(
@@ -88,7 +90,8 @@ def register_best_child_run(
             return None
         raise RuntimeError("Failed to configure MLflow tracking URI") from exc
 
-    mlf = MlflowClient()
+    # Use tracking-only client to avoid unsupported registry URI errors (e.g., azureml://)
+    tracking_client = TrackingServiceClient(tracking_uri=tracking_uri)
 
     logger.info(
         "Registering best child run",
@@ -97,7 +100,7 @@ def register_best_child_run(
 
     # Parent run lookup (job_name is often the run_id in AzureML MLflow)
     try:
-        parent_run = mlf.get_run(job_name)
+        parent_run = tracking_client.get_run(job_name)
     except Exception as exc:
         logger.exception(
             "Failed to fetch parent run from MLflow",

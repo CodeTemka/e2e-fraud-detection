@@ -14,7 +14,7 @@ class _UTCFormatter(logging.Formatter):
         timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
         if datefmt:
             return timestamp.strftime(datefmt)
-        # Use ISO 8601 with Zulu suffix and seconds precision by default
+        # Use ISO 8601 with Zulu suffix and second precision by default
         return timestamp.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -33,7 +33,7 @@ def get_logger(name: str | None = None) -> logging.Logger:
         handler = logging.StreamHandler()
         formatter = _UTCFormatter(
             fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%SZ",
+            datefmt="%H:%M:%SZ",
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
