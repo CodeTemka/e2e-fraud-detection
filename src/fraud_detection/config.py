@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # Github
     github_token: str | None = Field(None, alias="GITHUB_TOKEN")
-    github_owner: str = Field(None, alias="GITHUB_OWNER")
-    github_repo: str = Field(None, alias="GITHUB_REPO")
+    github_owner: str | None = Field(None, alias="GITHUB_OWNER")
+    github_repo: str | None = Field(None, alias="GITHUB_REPO")
 
     # Kaggle
     kaggle_username: str | None = Field(None, alias="KAGGLE_USERNAME")
