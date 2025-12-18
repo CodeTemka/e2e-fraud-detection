@@ -13,6 +13,7 @@ from fraud_detection.registry.register_from_run import (
     DEFAULT_MLFLOW_MODEL_ARTIFACT_CANDIDATES,
     register_model_from_run,
 )
+from fraud_detection.mlflow.tracking import normalize_tracking_uri
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -77,7 +78,8 @@ def register_best_child_run(
     """
     # Configure MLflow to point at the workspace tracking server
     try:
-        tracking_uri = ml_client.workspaces.get(ml_client.workspace_name).mlflow_tracking_uri
+        raw_tracking_uri = ml_client.workspaces.get(ml_client.workspace_name).mlflow_tracking_uri
+        tracking_uri = normalize_tracking_uri(raw_tracking_uri)
         mlflow.set_tracking_uri(tracking_uri)
     except Exception as exc:
         logger.exception(
