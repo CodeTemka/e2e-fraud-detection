@@ -10,12 +10,18 @@ from fraud_detection.serving.online_endpoint import (
     ensure_endpoint,
     update_traffic,
 )
+from fraud_detection.registry.automl_model_registry import (
+    list_completed_jobs,
+    register_best_child_run,
+)
+from fraud_detection.training.automl import EXPERIMENT_ACCURACY, EXPERIMENT_RECALL
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 DEFAULT_INSTANCE_TYPE = "Standard_E4s_v3"
 DEFAULT_INSTANCE_COUNT = 1
+DEFAULT_AUTOML_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY]
 
 
 def get_latest_model_version(ml_client: MLClient, *, model_name: str) -> str:
@@ -60,7 +66,44 @@ def deploy_latest_model(
         # fail fast if endpoint doesn't exist
         ml_client.online_endpoints.get(endpoint_name)
 
-    version = get_latest_model_version(ml_client, model_name=model_name)
+    try:
+        version = get_latest_model_version(ml_client, model_name=model_name)
+    except ResourceNotFoundError:
+        logger.warning(
+            "Model not found; attempting to register best AutoML run before deploy",
+            extra={"model_name": model_name, "experiments": DEFAULT_AUTOML_EXPERIMENTS},
+        )
+
+        jobs = list_completed_jobs(ml_client, DEFAULT_AUTOML_EXPERIMENTS)
+        for job_name, experiment_name in sorted(jobs.items(), reverse=True):
+            registered = register_best_child_run(
+                ml_client,
+                job_name=job_name,
+                experiment_name=experiment_name,
+                model_name=model_name,
+                skip_on_missing_best_child=True,
+                skip_on_model_error=True,
+            )
+
+            if registered:
+                version = str(registered.version)
+                logger.info(
+                    "Registered model from AutoML run as fallback",
+                    extra={
+                        "job_name": job_name,
+                        "experiment": experiment_name,
+                        "model_name": registered.name,
+                        "model_version": version,
+                    },
+                )
+                break
+        else:
+            raise ResourceNotFoundError(
+                message=(
+                    "No registered models found and no completed AutoML jobs available "
+                    f"to backfill model '{model_name}'."
+                )
+            )
 
     deployment = deploy_model(
         ml_client,
