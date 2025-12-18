@@ -64,15 +64,22 @@ workspace_location = require_setting(settings.location, "LOCATION")
 instance_type = settings.instance_type or "Standard_E4s_v3"
 instance_count = str(settings.instance_count or 1)
 
+tenant_id = require_setting(sp_credentials.get("tenantId"), "TENANTID")
+client_id = require_setting(sp_credentials.get("clientId"), "CLIENTID")
+client_secret = require_setting(sp_credentials.get("clientSecret"), "CLIENTSECRET")
+subscription_id = require_setting(sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID")
+
 required_secrets: dict[str, str | dict] = {
-    "TENANTID": require_setting(sp_credentials.get("tenantId"), "TENANTID"),
-    "CLIENTID": require_setting(sp_credentials.get("clientId"), "CLIENTID"),
-    "CLIENTSECRET": require_setting(sp_credentials.get("clientSecret"), "CLIENTSECRET"),
-    "SUBSCRIPTIONID": require_setting(sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID"),
-    "AZURE_CREDENTIALS":{"clientSecret": CLIENTSECRET,
-                        "clientId": CLIENTID,
-                        "tenantId": TENANTID,
-                        "subscriptionId": SUBSCRIPTIONID},
+    "TENANTID": tenant_id,
+    "CLIENTID": client_id,
+    "CLIENTSECRET": client_secret,
+    "SUBSCRIPTIONID": subscription_id,
+    "AZURE_CREDENTIALS": {
+        "clientSecret": client_secret,
+        "clientId": client_id,
+        "tenantId": tenant_id,
+        "subscriptionId": subscription_id,
+    },
     "RESOURCE_GROUP": require_setting(settings.resource_group, "RESOURCE_GROUP"),
     "WORKSPACE_NAME": require_setting(settings.workspace_name, "WORKSPACE_NAME"),
     "LOCATION": workspace_location,
@@ -105,6 +112,9 @@ for name, value in secrets.items():
     existed = secret_exists(name)
 
     # Encrypt secret
+    if isinstance(value, dict):
+        value = json.dumps(value)
+
     encrypted = sealed_box.encrypt(value.encode("utf-8"))
     encrypted_b64 = base64.b64encode(encrypted).decode("utf-8")
 
