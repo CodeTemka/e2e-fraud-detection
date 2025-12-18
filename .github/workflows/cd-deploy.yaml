@@ -61,7 +61,7 @@ jobs:
 
       - name: Install project (runtime deps or dev)
         run: |
-          pip install -e ".[dev]"
+          python -m pip install -e ".[dev]"
 
       - name: Validate required deployment secrets
         run: |

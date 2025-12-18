@@ -59,5 +59,13 @@ def register(
         typer.echo(f"Registered data asset '{name}' version '{version}'.")
 
 
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context) -> None:
+    """Default to the register command when no subcommand is provided."""
+
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(register)
+
+
 if __name__ == "__main__":
     app()
