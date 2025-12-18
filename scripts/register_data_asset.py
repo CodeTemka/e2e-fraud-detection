@@ -1,25 +1,17 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import typer
+from pathlib import Path
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Data
 from azure.core.exceptions import ResourceNotFoundError
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
 
 from fraud_detection.azure.client import get_ml_client  # noqa: E402
 
 app = typer.Typer(help="Register a local fraud dataset as an Azure ML data asset.")
 
 
-DEFAULT_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "creditcard.csv"
+DEFAULT_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "creditcard.csv"
 DEFAULT_NAME = "creditcard-data"
 DEFAULT_VERSION = "1"
 DEFAULT_DESCRIPTION = "Credit Card Fraud Detection Dataset"
