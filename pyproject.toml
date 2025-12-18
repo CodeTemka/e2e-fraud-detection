@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "End-to-end fraud detection workflows powered by Azure ML"
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [{ name = "Fraud Detection Team" }]
+authors = [{ name = "Temuulen Tuvshinjargal", email = "codetemuulen@gmail.com" }]
 
 dependencies = [
   "azure-ai-ml>=1.20.0",
@@ -30,6 +30,9 @@ dev = [
   "pytest>=8.3.0",
   "pytest-mock>=3.14.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/CodeTemka/e2e-fraud-detection"
 
 [project.scripts]
 fraud-cli = "fraud_detection.cli:run"
