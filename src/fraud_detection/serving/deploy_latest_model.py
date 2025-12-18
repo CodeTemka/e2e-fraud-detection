@@ -4,15 +4,15 @@ from __future__ import annotations
 from azure.ai.ml import MLClient
 from azure.core.exceptions import ResourceNotFoundError
 
+from fraud_detection.registry.automl_model_registry import (
+    list_completed_jobs,
+    register_best_child_run,
+)
 from fraud_detection.serving.online_endpoint import (
     DEFAULT_AUTH_MODE,
     deploy_model,
     ensure_endpoint,
     update_traffic,
-)
-from fraud_detection.registry.automl_model_registry import (
-    list_completed_jobs,
-    register_best_child_run,
 )
 from fraud_detection.training.automl import EXPERIMENT_ACCURACY, EXPERIMENT_RECALL
 from fraud_detection.utils.logging import get_logger
