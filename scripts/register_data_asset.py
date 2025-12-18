@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import typer
 from pathlib import Path
+
+import typer
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Data
 from azure.core.exceptions import ResourceNotFoundError
