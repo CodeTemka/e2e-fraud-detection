@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 DEFAULT_INSTANCE_TYPE = "Standard_E4s_v3"
 DEFAULT_INSTANCE_COUNT = 1
-DEFAULT_AUTOML_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY]
+DEFAULT_AUTOML_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY, 'custom_train_experiment', 'automated-ml-classification-recall-experiment', 'automated-ml-classification-experiment']
 
 
 def get_latest_model_version(ml_client: MLClient, *, model_name: str) -> str:
