@@ -36,3 +36,6 @@ hypothesis/
 mlruns/
 outputs/
 logs/
+
+# Ruff
+.ruff-cache/
