@@ -7,9 +7,9 @@ from typing import Annotated
 import pandas as pd
 import typer
 from azure.ai.ml.entities import Model
+from mlflow.entities import ViewType
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.cli_serve import serve_app
 from fraud_detection.config import get_settings
 from fraud_detection.data.data_validation import (
     DataValidationError,
@@ -20,6 +20,7 @@ from fraud_detection.registry.automl_model_registry import (
     list_completed_jobs,
     register_best_child_run,
 )
+from fraud_detection.serving.deploy import deploy_best_by_metric
 from fraud_detection.serving.deploy_latest_model import deploy_latest_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
@@ -38,6 +39,7 @@ from fraud_detection.training.automl import (
 )
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
+serve_app = typer.Typer(help="Serving operations (managed online endpoints).")
 app.add_typer(serve_app, name="serve")
 
 DEFAULT_AUTOML_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY]
@@ -373,6 +375,101 @@ def deploy_model_version(
         update_traffic(ml_client, endpoint_name=endpoint, traffic={dep.name: 100})
 
     typer.echo(f"Deployed {model_name}:{model_version} to {endpoint}/{dep.name}")
+
+
+@app.command()
+@serve_app.command("deploy")
+def deploy(
+    endpoint: Annotated[str, typer.Option("--endpoint", help="Endpoint name")],
+    model_name: Annotated[str, typer.Option("--model-name", help="Azure ML registered model name")],
+    deployment: Annotated[str, typer.Option("--deployment", help="Deployment slot name")] = "blue",
+    strategy: Annotated[
+        str, typer.Option("--strategy", help="Selection strategy: 'latest' or 'best'", case_sensitive=False)
+    ] = "latest",
+    metric: Annotated[
+        str | None,
+        typer.Option(
+            "--metric",
+            help="Metric for --strategy best (e.g. norm_macro_recall or metrics.norm_macro_recall)",
+        ),
+    ] = None,
+    direction: Annotated[str, typer.Option("--direction", help="'max' or 'min'", case_sensitive=False)] = "max",
+    experiment_prefix: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--experiment-prefix",
+            help="Experiment name prefix to search (repeatable). Example: --experiment-prefix automl-fraud",
+        ),
+    ] = None,
+    artifact_path: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--artifact-path",
+            help=(
+                "Artifact path candidate(s) under azureml://jobs/<run_id>/... "
+                "Repeat to provide fallbacks. If omitted, defaults are tried."
+            ),
+        ),
+    ] = None,
+    filter_string: Annotated[str, typer.Option("--filter", help="MLflow filter_string for run search")] = "",
+    view: Annotated[str, typer.Option("--view", help="active|all", case_sensitive=False)] = "active",
+    max_results: Annotated[int, typer.Option("--max-results", help="Max runs to consider", min=1)] = 5000,
+    instance_type: Annotated[str, typer.Option("--instance-type", help="VM SKU")] = "Standard_E4s_v3",
+    instance_count: Annotated[int, typer.Option("--instance-count", help="Instance count", min=1)] = 1,
+    traffic_100: Annotated[
+        bool, typer.Option("--traffic-100/--no-traffic-100", help="Send 100% traffic to this deployment")
+    ] = True,
+):
+    """Deploy the latest or best-performing model to a managed online endpoint."""
+
+    settings = get_settings().require_azure()
+    ml_client = get_ml_client(settings=settings)
+
+    strategy_l = strategy.lower()
+    prefixes = list(experiment_prefix) if experiment_prefix else ["automl-fraud"]
+
+    if strategy_l == "latest":
+        version, dep = deploy_latest_model(
+            ml_client,
+            model_name=model_name,
+            endpoint_name=endpoint,
+            deployment_name=deployment,
+            instance_type=instance_type,
+            instance_count=instance_count,
+            set_traffic_100=traffic_100,
+        )
+        typer.echo(f"Deployed latest {model_name}:{version} to {endpoint}/{dep}")
+        return
+
+    if strategy_l == "best":
+        if not metric:
+            raise typer.BadParameter("--metric is required when --strategy best")
+
+        view_type = ViewType.ACTIVE_ONLY if view.lower() == "active" else ViewType.ALL
+
+        version, dep, best = deploy_best_by_metric(
+            ml_client,
+            model_name=model_name,
+            endpoint_name=endpoint,
+            deployment_name=deployment,
+            experiment_prefixes=prefixes,
+            metric=metric,
+            direction=direction.lower(),
+            artifact_paths=list(artifact_path) if artifact_path else None,
+            filter_string=filter_string,
+            view_type=view_type,
+            max_results=max_results,
+            instance_type=instance_type,
+            instance_count=instance_count,
+            traffic_100=traffic_100,
+        )
+        typer.echo(
+            f"Deployed BEST {model_name}:{version} to {endpoint}/{dep} "
+            f"(metric={best.metric_name} value={best.metric_value:.6f} run_id={best.run_id})"
+        )
+        return
+
+    raise typer.BadParameter("--strategy must be 'latest' or 'best'")
 
 
 @app.command()
