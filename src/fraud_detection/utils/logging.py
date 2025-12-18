@@ -2,8 +2,20 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 _LOGGER_NAME = "fraud_detection"
+
+
+class _UTCFormatter(logging.Formatter):
+    """Formatter that always emits UTC timestamps."""
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        if datefmt:
+            return timestamp.strftime(datefmt)
+        # Use ISO 8601 with Zulu suffix and seconds precision by default
+        return timestamp.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def get_logger(name: str | None = None) -> logging.Logger:
@@ -19,9 +31,9 @@ def get_logger(name: str | None = None) -> logging.Logger:
 
     if not logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
+        formatter = _UTCFormatter(
             fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            datefmt="%Y-%m-%dT%H:%M:%SZ",
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
