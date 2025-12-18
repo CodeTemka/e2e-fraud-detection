@@ -3,7 +3,7 @@ name = "e2e-fraud-detection"
 version = "0.1.0"
 description = "End-to-end fraud detection workflows powered by Azure ML"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [{ name = "Fraud Detection Team" }]
 
 dependencies = [
@@ -34,7 +34,6 @@ dev = [
 [project.scripts]
 fraud-cli = "fraud_detection.cli:run"
 
-# ✅ IMPORTANT for src/ layout:
 # Tell setuptools that packages live under ./src
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -43,11 +42,6 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["fraud_detection*"]
 
-# If you have non-.py files inside the package you want included at install time,
-# uncomment the next line and add a MANIFEST.in or use tool.setuptools.package-data.
-# include-package-data = true
-
-
 [build-system]
 requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -55,8 +49,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
-extend-exclude = ["data", "deploy", "train", "notebooks", "azure_connection"]
+target-version = "py312"
+extend-exclude = ["data", "notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -64,12 +58,12 @@ ignore = ["E501"]
 
 [tool.black]
 line-length = 100
-target-version = ["py310"]
+target-version = ["py312"]
 
 [tool.isort]
 profile = "black"
 line_length = 100
 
-[tool.pytest.ini_options]
+[tool.pytest.ini_options] 
 testpaths = ["tests"]
 pythonpath = ["src"]
