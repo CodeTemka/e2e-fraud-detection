@@ -1,16 +1,8 @@
 import base64
 import json
-import sys
-from pathlib import Path
 
 import requests
 from nacl import encoding, public
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
 
 from fraud_detection.config import get_settings  # noqa: E402
 from fraud_detection.utils.logging import get_logger  # noqa: E402
@@ -40,14 +32,7 @@ def optional_setting(value: str | None, env_var: str) -> str | None:
 GITHUB_TOKEN = require_setting(settings.github_token, "GITHUB_TOKEN")
 OWNER = require_setting(settings.github_owner, "GITHUB_OWNER")
 REPO = require_setting(settings.github_repo, "GITHUB_REPO")
-SP_CREDENTIALS = Path(__file__).resolve().parent.parent / "json" / "sp_credentials.json"
-
-if not SP_CREDENTIALS.exists():
-    raise FileNotFoundError(
-        f"Service principal credentials not found at {SP_CREDENTIALS}. "
-        "Run scripts/az_prep.py to create the service principal and workspace, "
-        "then rerun this script."
-    )
+SP_CREDENTIALS = 'sp_credentials.json'
 
 with open(SP_CREDENTIALS, encoding="utf-8") as f:
     sp_credentials = json.load(f)
@@ -79,15 +64,15 @@ workspace_location = require_setting(settings.location, "LOCATION")
 instance_type = settings.instance_type or "Standard_E4s_v3"
 instance_count = str(settings.instance_count or 1)
 
-required_secrets: dict[str, str] = {
+required_secrets: dict[str, str | dict] = {
     "TENANTID": require_setting(sp_credentials.get("tenantId"), "TENANTID"),
     "CLIENTID": require_setting(sp_credentials.get("clientId"), "CLIENTID"),
-    "CLIENTSECRET": require_setting(
-        sp_credentials.get("clientSecret"), "CLIENTSECRET"
-    ),
-    "SUBSCRIPTIONID": require_setting(
-        sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID"
-    ),
+    "CLIENTSECRET": require_setting(sp_credentials.get("clientSecret"), "CLIENTSECRET"),
+    "SUBSCRIPTIONID": require_setting(sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID"),
+    "AZURE_CREDENTIALS":{"clientSecret": CLIENTSECRET,
+                        "clientId": CLIENTID,
+                        "tenantId": TENANTID,
+                        "subscriptionId": SUBSCRIPTIONID},
     "RESOURCE_GROUP": require_setting(settings.resource_group, "RESOURCE_GROUP"),
     "WORKSPACE_NAME": require_setting(settings.workspace_name, "WORKSPACE_NAME"),
     "LOCATION": workspace_location,
@@ -102,7 +87,7 @@ optional_secrets = {
     "KAGGLE_KEY": optional_setting(settings.kaggle_key, "KAGGLE_KEY"),
 }
 
-secrets: dict[str, str] = {}
+secrets: dict[str, str | dict] = {}
 secrets.update(required_secrets)
 for name, value in optional_secrets.items():
     if value is not None:
