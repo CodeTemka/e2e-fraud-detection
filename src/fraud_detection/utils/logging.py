@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 _LOGGER_NAME = "fraud_detection"
 
@@ -11,7 +11,7 @@ class _UTCFormatter(logging.Formatter):
     """Formatter that always emits UTC timestamps."""
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        timestamp = datetime.fromtimestamp(record.created, tz=UTC)
         if datefmt:
             return timestamp.strftime(datefmt)
         # Use ISO 8601 with Zulu suffix and second precision by default

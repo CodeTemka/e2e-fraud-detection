@@ -5,7 +5,7 @@ import re
 import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from azure.ai.ml import Input, MLClient, automl
@@ -48,7 +48,7 @@ def _get_git_sha() -> str:
 
 def _build_job_name(metric: str) -> str:
     """Build a unique job name based on metric, timestamp, and git sha."""
-    stamp = datetime.now(timezone.utc).strftime("%m%d-%H%M")
+    stamp = datetime.now(UTC).strftime("%m%d-%H%M")
     short_sha = _get_git_sha()[:5]
     return _slug(f"{metric}-{stamp}-{short_sha}")
 

@@ -9,11 +9,11 @@ from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Model
 from mlflow.tracking.client import TrackingServiceClient
 
+from fraud_detection.mlflow.tracking import normalize_tracking_uri
 from fraud_detection.registry.register_from_run import (
     DEFAULT_MLFLOW_MODEL_ARTIFACT_CANDIDATES,
     register_model_from_run,
 )
-from fraud_detection.mlflow.tracking import normalize_tracking_uri
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse, urlunparse
+
 import mlflow
 from azure.ai.ml import MLClient
-from urllib.parse import urlparse, urlunparse
 
 from fraud_detection.utils.logging import get_logger
 
