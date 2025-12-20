@@ -8,7 +8,6 @@ from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 
 runner = CliRunner()
 
-
 def test_create_automl_job_builds_expected_job():
     config = AutoMLJobConfig(
         experiment_name="demo-experiment",

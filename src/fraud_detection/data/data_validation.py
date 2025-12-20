@@ -1,7 +1,6 @@
 """Utilities for validating credit card fraud datasets."""
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 
 import pandas as pd
