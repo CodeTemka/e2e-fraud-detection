@@ -142,6 +142,7 @@ def register_best_child_run(
     experiment_name: str,
     model_name: str | None = None,
     skip_on_missing_best_child: bool = False,
+    skip_on_model_error: bool = False,
 ) -> Model | None:
     """Register the best child run from an AutoML parent job as an MLflow model."""
     allowed_experiments = DEFAULT_EXPERIMENTS + NEW_EXPERIMENTS
@@ -190,17 +191,23 @@ def register_best_child_run(
     )
 
     # FIX: call register_model_from_run (not register_best_child_run recursively)
-    model = register_model_from_run(
-        ml_client,
-        model_name=resolved_model_name,
-        best_child_run=best_child_run,
-        description="AutoML classification model registered from best child run",
-        tags={
-            "experiment_name": experiment_name,
-            "parent_job_name": job_name,
-            "best_child_run_id": best_child_run,
-        },
-    )
+    try:
+        model = register_model_from_run(
+            ml_client,
+            model_name=resolved_model_name,
+            best_child_run=best_child_run,
+            description="AutoML classification model registered from best child run",
+            tags={
+                "experiment_name": experiment_name,
+                "parent_job_name": job_name,
+                "best_child_run_id": best_child_run,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to register model from best child run")
+        if skip_on_model_error:
+            return None
+        raise
 
     return model
 
