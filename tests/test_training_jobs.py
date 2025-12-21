@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from fraud_detection import cli
-from fraud_detection.registry.automl_model_registry import list_completed_jobs
+from fraud_detection.registry.automl_registry import list_completed_jobs
 from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 
 runner = CliRunner()
@@ -36,7 +36,7 @@ def test_list_completed_jobs_filters_on_status_and_experiment():
     ml_client = SimpleNamespace(jobs=SimpleNamespace(list=lambda list_view_type=None: jobs))
 
     result = list_completed_jobs(ml_client, experiments=["exp-a"])
-    assert result == {"job-a": "exp-a", "job-c": "exp-a"}
+    assert result == {"exp-a": ["job-a", "job-c"]}
 
 
 def test_submit_automl_rejects_empty_dataset(monkeypatch):

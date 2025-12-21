@@ -16,12 +16,11 @@ from fraud_detection.data.data_validation import (
     ValidationOptions,
     validate_creditcard_data,
 )
-from fraud_detection.registry.automl_model_registry import (
+from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
     register_best_child_run,
 )
-from fraud_detection.serving.deploy import deploy_best_by_metric
-from fraud_detection.serving.deploy_latest_model import deploy_latest_model
+from fraud_detection.serving.deploy import deploy_best_by_metric, deploy_latest_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
     delete_endpoint,
