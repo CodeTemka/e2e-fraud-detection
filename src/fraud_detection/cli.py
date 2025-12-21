@@ -6,7 +6,9 @@ from typing import Annotated
 
 import pandas as pd
 import typer
-from azure.ai.ml.entities import Model
+from azure.ai.ml.constants import AssetTypes
+from azure.ai.ml.entities import Data, Model
+from azure.core.exceptions import ResourceNotFoundError
 from mlflow.entities import ViewType
 
 from fraud_detection.azure.client import get_ml_client
@@ -495,6 +497,88 @@ def deploy_latest(
         set_traffic_100=traffic_100,
     )
     typer.echo(f"Deployed latest {model_name}:{version} to {endpoint}/{dep_name}")
+
+
+ROOT_DIR = Path(__file__).resolve().parents[2]  # repo root for src/ layout
+DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
+
+
+@serve_app.command("invoke")
+def serve_invoke(
+    endpoint_name: Annotated[str, typer.Option("--endpoint-name", help="Endpoint to call")],
+    deployment_name: Annotated[str, typer.Option("--deployment-name", help="Deployment slot name")] = "blue",
+    request_file: Annotated[
+        Path,
+        typer.Option(
+            "--request-file",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to JSON request payload",
+        ),
+    ] = DEFAULT_REQUEST_FILE,
+) -> None:
+    """Invoke a managed online endpoint deployment (smoke test)."""
+    settings = get_settings().require_azure()
+    ml_client = get_ml_client(settings=settings)
+
+    try:
+        ml_client.online_endpoints.get(endpoint_name)
+    except ResourceNotFoundError as exc:
+        raise typer.BadParameter(f"Endpoint '{endpoint_name}' does not exist") from exc
+
+    response = ml_client.online_endpoints.invoke(
+        endpoint_name=endpoint_name,
+        deployment_name=deployment_name,
+        request_file=request_file,
+    )
+
+    # echo response for CLI visibility
+    typer.echo(response)
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_DATA_PATH = ROOT_DIR / "data" / "creditcard.csv"
+DEFAULT_DATA_NAME = "creditcard-data"
+DEFAULT_DATA_VERSION = "1"
+DEFAULT_DATA_DESCRIPTION = "Credit Card Fraud Detection Dataset"
+
+
+@app.command("register-data")
+def register_data(
+    path: Annotated[
+        Path,
+        typer.Option("--path", "-p", exists=True, dir_okay=False, readable=True,
+                    help="Path to the local data file to register."),
+    ] = DEFAULT_DATA_PATH,
+    name: str = typer.Option(DEFAULT_DATA_NAME, "--name", help="Name of the data asset."),
+    version: str = typer.Option(DEFAULT_DATA_VERSION, "--version", help="Version of the data asset."),
+    description: str = typer.Option(
+        DEFAULT_DATA_DESCRIPTION, "--description", help="Description for the data asset."
+    ),
+) -> None:
+    """Register a local fraud dataset as an Azure ML data asset (idempotent)."""
+    settings = get_settings().require_azure()
+    ml_client = get_ml_client(settings=settings)
+
+    data_asset = Data(
+        name=name,
+        path=str(path.resolve()),
+        description=description,
+        type=AssetTypes.URI_FILE,
+        version=version,
+    )
+
+    try:
+        ml_client.data.get(name=name, version=version)
+        typer.echo(f"Data asset '{name}' version '{version}' already exists. Skipping registration.")
+        return
+    except ResourceNotFoundError:
+        pass
+
+    ml_client.data.create_or_update(data_asset)
+    typer.echo(f"Registered data asset '{name}' version '{version}' from '{path}'.")
+
+
 
 
 def run():

@@ -3,18 +3,11 @@
 import json
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Workspace
 from azure.identity import ClientSecretCredential
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
 
 from fraud_detection.config import get_settings  # noqa: E402
 from fraud_detection.utils.logging import get_logger  # noqa: E402

@@ -1,14 +1,7 @@
 """Download the Kaggle credit card fraud dataset if it is missing."""
 
 import os
-import sys
 from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
 
 from fraud_detection.config import get_settings  # noqa: E402
 from fraud_detection.utils.logging import get_logger  # noqa: E402
@@ -19,7 +12,7 @@ logger = get_logger(__name__)
 os.environ["KAGGLE_USERNAME"] = settings.kaggle_username
 os.environ["KAGGLE_KEY"] = settings.kaggle_key
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_FILE = DATA_DIR / "creditcard.csv"
 
 
