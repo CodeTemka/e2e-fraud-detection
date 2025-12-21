@@ -4,23 +4,26 @@ import pandas as pd
 import pytest
 from mlflow.entities import Experiment
 
-from fraud_detection.mlflow import best_runs
+from fraud_detection.registry import best_runs_by_metric as best_runs
 
 
 @pytest.mark.parametrize(
     "metric,expected",
-    [("auc", "metrics.auc"), ("metrics.recall", "metrics.recall")],
+    [("AUC_micro", "metrics.AUC_micro"), ("metrics.AUC_macro", "metrics.AUC_macro")],
 )
 def test_metric_col(metric, expected):
     assert best_runs._metric_col(metric) == expected
 
 
-@pytest.mark.parametrize(
-    "metric,expected",
-    [("auc", "auc"), ("metrics.f1", "f1")],
-)
-def test_normalize_metric_key(metric, expected):
-    assert best_runs._normalize_metric_key_for_mlflow_client(metric) == expected
+def test_metric_col_sequence_deduplicates_and_validates():
+    assert best_runs._metric_col(["AUC_macro", "metrics.AUC_macro", "AUC_macro"]) == [
+        "metrics.AUC_macro"
+    ]
+
+
+def test_normalize_metric_to_col_rejects_unknown():
+    with pytest.raises(ValueError):
+        best_runs._metric_col("not-a-metric")
 
 
 def test_experiments_by_prefix_filters_and_sets_tracking(monkeypatch):
@@ -32,7 +35,7 @@ def test_experiments_by_prefix_filters_and_sets_tracking(monkeypatch):
 
     experiments = [Experiment("id1", "exp-alpha", "", ""), Experiment("id2", "beta", "", "")]
 
-    monkeypatch.setattr(best_runs, "set_tracking_uri_from_workspace", fake_set_tracking)
+    monkeypatch.setattr(best_runs, "mlflow_tracking_uri", fake_set_tracking)
     monkeypatch.setattr(best_runs.mlflow, "search_experiments", lambda: experiments)
 
     workspace = SimpleNamespace(mlflow_tracking_uri="uri")
@@ -59,7 +62,7 @@ def test_best_run_by_metric_selects_top(monkeypatch):
         {
             "run_id": ["r2", "r1"],
             "experiment_name": ["exp-one", "exp-one"],
-            "metrics.auc": [0.9, 0.7],
+            "metrics.AUC_micro": [0.9, 0.7],
         }
     )
 
@@ -68,7 +71,7 @@ def test_best_run_by_metric_selects_top(monkeypatch):
 
     ml_client = SimpleNamespace()
     result = best_runs.best_run_by_metric(
-        ml_client, experiment_prefixes=["exp"], metric="auc", direction="max"
+        ml_client, experiment_prefixes=["exp"], metric="AUC_micro", direction="max"
     )
 
     assert result.run_id == "r2"
@@ -87,11 +90,14 @@ def test_best_run_by_metric_validates_inputs(monkeypatch):
         best_runs.best_run_by_metric(
             SimpleNamespace(),
             experiment_prefixes=["exp"],
-            metric="auc",
+            metric="AUC_micro",
             direction="min",
         )
 
     with pytest.raises(ValueError):
         best_runs.best_run_by_metric(
-            SimpleNamespace(), experiment_prefixes=["exp"], metric="auc", direction="middle"
+            SimpleNamespace(),
+            experiment_prefixes=["exp"],
+            metric="AUC_micro",
+            direction="middle",
         )
