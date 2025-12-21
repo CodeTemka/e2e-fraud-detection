@@ -32,12 +32,16 @@ try:
     # Original style (job_name -> experiment_name)
     from fraud_detection.registry.automl_model_registry import (  # type: ignore
         list_completed_jobs as _list_completed_jobs_flat,
+    )
+    from fraud_detection.registry.automl_model_registry import (
         register_best_child_run,
     )
 except Exception:  # pragma: no cover
     # Newer style might have list_completed_jobs_flat
     from fraud_detection.registry.automl_registry import (  # type: ignore
         list_completed_jobs_flat as _list_completed_jobs_flat,
+    )
+    from fraud_detection.registry.automl_registry import (
         register_best_child_run,
     )
 

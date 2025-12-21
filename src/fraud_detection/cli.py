@@ -37,7 +37,6 @@ from fraud_detection.training.automl import (
     submit_job,
 )
 
-
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 serve_app = typer.Typer(help="Serving operations (managed online endpoints).")
 app.add_typer(serve_app, name="serve")

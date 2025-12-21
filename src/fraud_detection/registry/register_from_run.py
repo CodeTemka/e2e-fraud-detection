@@ -1,8 +1,7 @@
 """Register a model version directly from an MLflow run artifact."""
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Sequence
+from collections.abc import Iterable, Sequence
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
