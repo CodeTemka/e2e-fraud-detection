@@ -16,7 +16,7 @@ from fraud_detection.data.data_validation import (
     ValidationOptions,
     validate_creditcard_data,
 )
-from fraud_detection.registry.automl_model_registry import (
+from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
     register_best_child_run,
 )
@@ -37,6 +37,7 @@ from fraud_detection.training.automl import (
     recall_job,
     submit_job,
 )
+
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 serve_app = typer.Typer(help="Serving operations (managed online endpoints).")
