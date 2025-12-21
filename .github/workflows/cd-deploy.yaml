@@ -33,6 +33,7 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.TENANTID }}
       AZURE_CLIENT_ID: ${{ secrets.CLIENTID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
+      PYTHONUNBUFFERED: "1"
 
       # Azure ML workspace + project settings (consumed by pydantic Settings)
       SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
@@ -61,12 +62,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: Upgrade pip and install build backend
+        run: python -m pip install --upgrade pip build
 
       - name: Install project (runtime deps or dev)
         run: |
           python -m pip install -e ".[dev]"
+
+      - name: Build package wheel for deployment
+        run: python -m build
 
       - name: Validate required deployment secrets
         run: |
@@ -119,7 +123,7 @@ jobs:
 
       - name: Smoke test deployed endpoint
         run: |
-          python scripts/test_deployment.py \
+          python scripts/test_deployment.py invoke \
             --endpoint-name "$ENDPOINT_NAME" \
             --deployment-name "$DEPLOYMENT_NAME"
 
