@@ -6,7 +6,12 @@ import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Iterable
+
+import re
+import subprocess
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
@@ -17,7 +22,7 @@ from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Stable experiment names per metric (NOT tied to a specific algorithm)
+# Stable experiment prefix (NOT tied to a specific algorithm)
 EXPERIMENT_PREFIX = "automl-fraud-"
 
 # Supported metrics for Azure AutoML classification jobs (your strict list)
@@ -27,6 +32,11 @@ SUPPORTED_CLASSIFICATION_METRICS: set[str] = {
     "average_precision_score_weighted",
     "norm_macro_recall",
     "precision_score_weighted",
+}
+
+# User-friendly aliases accepted by the CLI; mapped to Azure-native metrics
+METRIC_ALIASES: dict[str, str] = {
+    "recall": "norm_macro_recall",
 }
 
 
@@ -138,11 +148,13 @@ def submit_job(ml_client: MLClient, job: Any) -> str:
 
 def _metric_check(metric: str | ClassificationPrimaryMetrics) -> str:
     """Validate metric strictly against supported list; return the metric string."""
-    metric_str = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
+
+    metric_raw = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
+    metric_str = METRIC_ALIASES.get(metric_raw, metric_raw)
 
     if metric_str not in SUPPORTED_CLASSIFICATION_METRICS:
-        allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS))
-        raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
+        allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS | set(METRIC_ALIASES)))
+        raise ValueError(f"Unsupported metric '{metric_raw}'. Choose one of: {allowed}")
 
     return metric_str
 
@@ -185,4 +197,5 @@ __all__ = [
     "automl_job_builder",
     "EXPERIMENT_PREFIX",
     "SUPPORTED_CLASSIFICATION_METRICS",
+    "METRIC_ALIASES",
 ]
