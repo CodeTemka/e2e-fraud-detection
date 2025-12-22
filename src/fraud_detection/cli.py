@@ -302,10 +302,12 @@ def submit_automl(
     compute_target = compute or settings.training_compute
 
     if not training_data:
-        raise typer.BadParameter("Provide --dataset or set AML_DATASET.")
+        typer.echo("Provide --dataset or set AML_DATASET.", err=True)
+        raise typer.Exit(code=1)
 
     if not compute_target:
-        raise typer.BadParameter("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.")
+        typer.echo("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.", err=True)
+        raise typer.Exit(code=1)
 
     ml_client = get_ml_client(settings=settings)
     compute_preexists = _compute_exists(ml_client, compute_target)
