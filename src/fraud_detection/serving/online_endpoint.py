@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from azure.ai.ml import MLClient
-from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
+from azure.ai.ml.entities import ManagedOnlineEndpoint
 from azure.core.exceptions import ResourceNotFoundError
 
 from fraud_detection.utils.logging import get_logger

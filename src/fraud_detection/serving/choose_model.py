@@ -1,8 +1,8 @@
 """Utilities for selecting registered Azure ML models for deployment."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Model

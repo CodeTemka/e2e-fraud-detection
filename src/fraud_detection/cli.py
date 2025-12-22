@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import pandas as pd
 import typer
@@ -59,6 +60,7 @@ from fraud_detection.utils.logging import get_logger
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 logger = get_logger(__name__)
 
+
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
     if not values:
@@ -71,7 +73,7 @@ def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
 
 def _load_local_table(path: str, *, sample_rows: int | None = None) -> pd.DataFrame:
     """Load a local dataset from CSV or MLTable folder into a Pandas DataFrame.
-    
+
     If sample_rows is provided, load only the first N rows for quick validation.
     """
     p = Path(path)
@@ -79,10 +81,11 @@ def _load_local_table(path: str, *, sample_rows: int | None = None) -> pd.DataFr
     # CSV file
     if p.is_file() and p.suffix.lower() == ".csv":
         return pd.read_csv(p, nrows=sample_rows)
-    
+
     # Local MLTable folder: should contain a file literally named "MLTable"
     if p.is_dir() and (p / "MLTable").is_file():
         import mltable
+
         tbl = mltable.load(str(p))
         if sample_rows is not None:
             tbl = tbl.take(int(sample_rows))
@@ -106,12 +109,7 @@ def _safe_update_compute_secret(
     deployment_compute: str | None = None,
 ) -> None:
     """Best-effort update of GitHub secrets for new compute resources."""
-
-    if not (
-        settings.github_token
-        and settings.github_owner
-        and settings.github_repo
-    ):
+    if not (settings.github_token and settings.github_owner and settings.github_repo):
         logger.info(
             "Skipping GitHub secret update; GitHub settings not configured",
             extra={"training_compute": training_compute, "deployment_compute": deployment_compute},
@@ -125,10 +123,14 @@ def _safe_update_compute_secret(
             training_compute=training_compute,
             deployment_compute=deployment_compute,
         )
-    except Exception as exc:  # pragma: no cover - best effort secret update
+    except Exception as exc:  # pragma: no cover
         logger.warning(
             "Failed to update GitHub secrets for compute",
-            extra={"error": str(exc), "training_compute": training_compute, "deployment_compute": deployment_compute},
+            extra={
+                "error": str(exc),
+                "training_compute": training_compute,
+                "deployment_compute": deployment_compute,
+            },
         )
 
 
@@ -158,10 +160,29 @@ DEFAULT_DATA_DESCRIPTION = "Credit card fraud detection dataset (from Kaggle)"
 
 @app.command()
 def register_local_data(
-    path: Path = typer.Option(DEFAULT_DATA_PATH, "--path", "-[p]", exists=True, dir_okay=False, readable=True, help="Path to the local CSV file containing the dataset."),
-    name: str = typer.Option(DEFAULT_DATA_NAME, "--name", "-n", help="Name of the registered dataset in Azure ML."),
-    version: str = typer.Option(DEFAULT_DATA_VERSION, "--version", "-v", help="Version of the registered dataset."),
-    description: str = typer.Option(DEFAULT_DATA_DESCRIPTION, "--description", "-d", help="Description of the registered dataset."),
+    path: Annotated[
+        Path,
+        typer.Option(
+            "--path",
+            "-p",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to the local CSV file containing the dataset.",
+        ),
+    ] = DEFAULT_DATA_PATH,
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Name of the registered dataset in Azure ML."),
+    ] = DEFAULT_DATA_NAME,
+    version: Annotated[
+        str,
+        typer.Option("--version", "-v", help="Version of the registered dataset."),
+    ] = DEFAULT_DATA_VERSION,
+    description: Annotated[
+        str,
+        typer.Option("--description", "-d", help="Description of the registered dataset."),
+    ] = DEFAULT_DATA_DESCRIPTION,
 ):
     """Register a local fraud dataset (CSV file) to Azure ML data asset."""
     settings = get_settings().require_azure()
@@ -188,11 +209,36 @@ def register_local_data(
 
 @app.command()
 def validate_data(
-    path: str = typer.Option('data/creditcard.csv', "--path", "-p", help="local CSV file or local MLTable folder path"),
-    sample_rows: int | None = typer.Option(None, "--sample-rows", help="Only load the first N rows for a quick validatoin pass (recommended for speed)", min=1),
-    skip_balance_check: bool = typer.Option(False, "--balance-check", help="Checking the class balance in the dataset"),
-    balance_lower: float = typer.Option(0.005, "--balance-lower", help="Lower bound for the class balance ratio (fraudulent / total)"),
-    balance_upper: float = typer.Option(0.02, "--balance-upper", help="Upper bound for the class balance ratio (fraudulent / total)"),
+    path: Annotated[
+        str,
+        typer.Option("--path", "-p", help="local CSV file or local MLTable folder path"),
+    ] = "data/creditcard.csv",
+    sample_rows: Annotated[
+        int | None,
+        typer.Option(
+            "--sample-rows",
+            help="Only load the first N rows for a quick validatoin pass (recommended for speed)",
+            min=1,
+        ),
+    ] = None,
+    skip_balance_check: Annotated[
+        bool,
+        typer.Option("--balance-check", help="Checking the class balance in the dataset"),
+    ] = False,
+    balance_lower: Annotated[
+        float,
+        typer.Option(
+            "--balance-lower",
+            help="Lower bound for the class balance ratio (fraudulent / total)",
+        ),
+    ] = 0.005,
+    balance_upper: Annotated[
+        float,
+        typer.Option(
+            "--balance-upper",
+            help="Upper bound for the class balance ratio (fraudulent / total)",
+        ),
+    ] = 0.02,
 ):
     """Validate a local fraud dataset (CSV or MLTable folder)."""
     try:
@@ -205,29 +251,49 @@ def validate_data(
         )
     except (FileNotFoundError, ValueError, DataValidationError) as e:
         raise typer.BadParameter(str(e)) from e
-    
+
     typer.echo("Data validation passed successfully.")
 
 
 @app.command()
 def submit_automl(
-    metric: str = typer.Option('recall', "--metric", "-m", help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}", case_sensitive=False),
-    dataset: str = typer.Option(None, help="Override the MLTable asset path (can be local)."), # This is questionable.
-    compute: str = typer.Option(None, help="Override the Azure ML compute target name."), # And also this one.
-    compute_size: str = typer.Option(
-        "Standard_DS3_v2",
-        "--compute-size",
-        help="VM size for the training compute cluster.",
-    ),
-    min_nodes: int = typer.Option(0, "--min-nodes", help="Minimum node count for training compute."),
-    max_nodes: int = typer.Option(2, "--max-nodes", help="Maximum node count for training compute."),
-    algorithms: list[str] | None = typer.Option(
-        None,
-        "--algorithms",
-        "-a",
-        help="Restrict training algorithms (comma-separated or repeated). "
-        "If not provided, AutoML uses its default algorithm set.",
-    ),
+    metric: Annotated[
+        str,
+        typer.Option(
+            "--metric",
+            "-m",
+            help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
+            case_sensitive=False,
+        ),
+    ] = "recall",
+    dataset: Annotated[
+        str | None,
+        typer.Option(help="Override the MLTable asset path (can be local)."),
+    ] = None,
+    compute: Annotated[
+        str | None,
+        typer.Option(help="Override the Azure ML compute target name."),
+    ] = None,
+    compute_size: Annotated[
+        str,
+        typer.Option("--compute-size", help="VM size for the training compute cluster."),
+    ] = "Standard_DS3_v2",
+    min_nodes: Annotated[
+        int,
+        typer.Option("--min-nodes", help="Minimum node count for training compute."),
+    ] = 0,
+    max_nodes: Annotated[
+        int,
+        typer.Option("--max-nodes", help="Maximum node count for training compute."),
+    ] = 2,
+    algorithms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--algorithms",
+            "-a",
+            help="Restrict training algorithms (comma-separated or repeated). If not provided, AutoML uses its default algorithm set.",
+        ),
+    ] = None,
 ):
     """Submit an AutoML classification job for fraud detection."""
     settings = get_settings().require_azure()
@@ -241,10 +307,9 @@ def submit_automl(
     if not compute_target:
         raise typer.BadParameter("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.")
 
-    #Note: CD pipeline will always validate the dataset before submitting the job. So we skip local validation here.
-
     ml_client = get_ml_client(settings=settings)
     compute_preexists = _compute_exists(ml_client, compute_target)
+
     ensure_training_compute(
         ml_client,
         name=compute_target,
@@ -272,13 +337,40 @@ def submit_automl(
 
 @app.command()
 def register_best_automl_model(
-    experiment: str | None = typer.Option(None, "--experiment", "-e", help="Experiment name prefix to search for AutoML jobs (default: all auotoml jobs)."),
-    metric: str = typer.Option('recall', "--metric", "-m", help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}", case_sensitive=False),
-    model_name: str = typer.Option(None, "--model-name", help="Optional stable model name to use instead of slugified experiment names. Useful or CD pipelines."),
-    best_child_run: bool = typer.Option(False, "--best-child-run", help="Register the best child run model from the AutoML parent run."),
-    best_by_metric: bool = typer.Option(False, "--best-by-metric", help="Register the best AutoML model with highest given metric."),
+    experiment: Annotated[
+        str | None,
+        typer.Option(
+            "--experiment",
+            "-e",
+            help="Experiment name prefix to search for AutoML jobs (default: all auotoml jobs).",
+        ),
+    ] = None,
+    metric: Annotated[
+        str,
+        typer.Option(
+            "--metric",
+            "-m",
+            help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
+            case_sensitive=False,
+        ),
+    ] = "recall",
+    model_name: Annotated[
+        str | None,
+        typer.Option(
+            "--model-name",
+            help="Optional stable model name to use instead of slugified experiment names. Useful or CD pipelines.",
+        ),
+    ] = None,
+    best_child_run: Annotated[
+        bool,
+        typer.Option("--best-child-run", help="Register the best child run model from the AutoML parent run."),
+    ] = False,
+    best_by_metric: Annotated[
+        bool,
+        typer.Option("--best-by-metric", help="Register the best AutoML model with highest given metric."),
+    ] = False,
 ):
-    """Register the best AutoML child run model or Register the best AutoML model with the highest given metric."""
+    """Register the best AutoML child run model or the best AutoML model by metric."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
 
@@ -291,7 +383,8 @@ def register_best_automl_model(
                 view_type=ViewType.ALL,
             )
             typer.echo(
-                f"Found best model by metric: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}."
+                f"Found best model by metric: {best_run.metric_name}={best_run.metric_value} "
+                f"from run {best_run.run_id} in experiment {best_run.experiment_name}."
             )
         except Exception as e:
             raise typer.Exit(code=1) from e
@@ -304,7 +397,8 @@ def register_best_automl_model(
                 description=f"Best child run model by {best_run.metric_name}={best_run.metric_value}",
             )
             typer.echo(
-                f"Registered best child run model: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}."
+                f"Registered best child run model: {best_run.metric_name}={best_run.metric_value} "
+                f"from run {best_run.run_id} in experiment {best_run.experiment_name}."
             )
         except Exception as e:
             raise typer.Exit(code=1) from e
@@ -334,17 +428,21 @@ def register_best_automl_model(
                     model_name=model_name,
                 )
                 if isinstance(model, Model):
-                    typer.echo(
-                        f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'."
-                    )
+                    typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")
                 else:
                     typer.echo(f"Skipped registration for job '{job_name}'.")
 
 
 @app.command()
 def endpoint_create(
-    name: str = typer.Option(..., "--name", "-n", help="Name of the online endpoint to create."),
-    description: str = typer.Option(None, "--description", "-d", help="Description of the online endpoint.")
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Name of the online endpoint to create."),
+    ] = ...,
+    description: Annotated[
+        str | None,
+        typer.Option("--description", "-d", help="Description of the online endpoint."),
+    ] = None,
 ):
     """Create a managed online endpoint."""
     settings = get_settings().require_azure()
@@ -361,7 +459,10 @@ def endpoint_create(
 
 @app.command()
 def endpoint_delete(
-    name: str = typer.Option(..., "--name", "-n", help="Name of the online endpoint to delete."),
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Name of the online endpoint to delete."),
+    ] = ...,
 ):
     """Delete a managed online endpoint."""
     settings = get_settings().require_azure()
@@ -369,12 +470,18 @@ def endpoint_delete(
 
     delete_endpoint(ml_client, name=name)
     typer.echo(f"Deleted online endpoint '{name}'")
-    
+
 
 @app.command()
 def endpoint_traffic(
-    endpoint: str = typer.Option(..., "--endpoint", "-e", help="Name of the online endpoint to update."),
-    traffic: list[str] = typer.Option(..., "--traffic", "-t", help="Traffic mapping like blue=100 green=0 (repeatable)"),
+    endpoint: Annotated[
+        str,
+        typer.Option("--endpoint", "-e", help="Name of the online endpoint to update."),
+    ] = ...,
+    traffic: Annotated[
+        list[str],
+        typer.Option("--traffic", "-t", help="Traffic mapping like blue=100 green=0 (repeatable)"),
+    ] = ...,
 ):
     """Update endpoint traffic split. Traffic must sum to 100%."""
     settings = get_settings().require_azure()
@@ -390,30 +497,27 @@ def endpoint_traffic(
             mapping[dep] = int(pct)
         except ValueError as e:
             raise typer.BadParameter(f"Invalid percent '{pct}' for deployment '{dep}'.") from e
-    
+
     update_traffic(ml_client, endpoint_name=endpoint, traffic=mapping)
     typer.echo(f"Updated traffic for endpoint '{endpoint}': {mapping}")
 
 
 @app.command()
 def choose_one_registered_model(
-    endpoint_name: str = typer.Option(
-        "fraud-detection-prod",
-        "--endpoint-name",
-        "-e",
-        help="Managed online endpoint to target in the CD pipeline.",
-    ),
-    name_prefix: str | None = typer.Option(
-        None, "--name-prefix", help="Optional prefix to filter registered models."
-    ),
+    endpoint_name: Annotated[
+        str,
+        typer.Option(
+            "--endpoint-name",
+            "-e",
+            help="Managed online endpoint to target in the CD pipeline.",
+        ),
+    ] = "fraud-detection-prod",
+    name_prefix: Annotated[
+        str | None,
+        typer.Option("--name-prefix", help="Optional prefix to filter registered models."),
+    ] = None,
 ):
-    """Pick a registered Azure ML model and store its name for deployment.
-
-    The chosen model name and endpoint name are written to GitHub Actions
-    secrets (MODEL_NAME and ENDPOINT_NAME) so the CD workflow deploys the
-    correct artifact.
-    """
-
+    """Pick a registered Azure ML model and store its name for deployment."""
     settings = get_settings().require_azure().require_github()
 
     ml_client = get_ml_client(settings=settings)
@@ -427,10 +531,7 @@ def choose_one_registered_model(
     for line in build_registered_models_table(models):
         typer.echo(line)
 
-    selection = typer.prompt(
-        "Enter the number of the model to promote for deployment",
-        type=int,
-    )
+    selection = typer.prompt("Enter the number of the model to promote for deployment", type=int)
 
     try:
         chosen = choose_registered_model(models, selection)
@@ -451,15 +552,42 @@ def choose_one_registered_model(
 
 @app.command()
 def deploy(
-    model_name: str = typer.Option(None, "--model-name", "-m", help="Name of the registered model to deploy."),
-    endpoint_name: str = typer.Option(None, "--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
-    deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name."),
-    compute: str = typer.Option(None, "--compute", "-c", help="Compute cluster name to ensure for deployment."),
-    instance_type: str = typer.Option("Standard_DS3_v2", "--instance-type", "-it", help="Azure ML compute instance type."),
-    instance_count: int = typer.Option(1, "--instance-count", "-ic", help="Number of instances to deploy."),
-    compute_min_nodes: int = typer.Option(0, "--compute-min-nodes", help="Minimum nodes for the deployment compute cluster."),
-    compute_max_nodes: int = typer.Option(1, "--compute-max-nodes", help="Maximum nodes for the deployment compute cluster."),
-    tags: list[str] = typer.Option(None, "--tag", "-t", help="Tags to apply to the deployment (repeatable key=value)."),
+    model_name: Annotated[
+        str | None,
+        typer.Option("--model-name", "-m", help="Name of the registered model to deploy."),
+    ] = None,
+    endpoint_name: Annotated[
+        str | None,
+        typer.Option("--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
+    ] = None,
+    deployment_name: Annotated[
+        str,
+        typer.Option("--deployment-name", "-d", help="Deployment slot name."),
+    ] = "blue",
+    compute: Annotated[
+        str | None,
+        typer.Option("--compute", "-c", help="Compute cluster name to ensure for deployment."),
+    ] = None,
+    instance_type: Annotated[
+        str,
+        typer.Option("--instance-type", "-it", help="Azure ML compute instance type."),
+    ] = "Standard_DS3_v2",
+    instance_count: Annotated[
+        int,
+        typer.Option("--instance-count", "-ic", help="Number of instances to deploy."),
+    ] = 1,
+    compute_min_nodes: Annotated[
+        int,
+        typer.Option("--compute-min-nodes", help="Minimum nodes for the deployment compute cluster."),
+    ] = 0,
+    compute_max_nodes: Annotated[
+        int,
+        typer.Option("--compute-max-nodes", help="Maximum nodes for the deployment compute cluster."),
+    ] = 1,
+    tags: Annotated[
+        list[str] | None,
+        typer.Option("--tag", "-t", help="Tags to apply to the deployment (repeatable key=value)."),
+    ] = None,
 ):
     """Deploy a registered model to a managed online endpoint."""
     settings = get_settings().require_azure()
@@ -467,7 +595,9 @@ def deploy(
 
     compute_target = compute or settings.deployment_compute
     if not compute_target:
-        raise typer.BadParameter("Provide --compute or set AML_COMPUTE_DEPLOY/AML_COMPUTE for deployment compute creation.")
+        raise typer.BadParameter(
+            "Provide --compute or set AML_COMPUTE_DEPLOY/AML_COMPUTE for deployment compute creation."
+        )
 
     compute_preexists = _compute_exists(ml_client, compute_target)
     ensure_deployment_compute(
@@ -502,11 +632,28 @@ def deploy(
 
 DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
 
+
 @app.command()
 def serve_invoke(
-    endpoint_name: str = typer.Option(..., "--endpoint-name", "-e", help="Endpoint to call"),
-    deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name"),
-    request_file: Path = typer.Option(DEFAULT_REQUEST_FILE, "--request-file", "-r", exists=True, dir_okay=False, readable=True, help="Path to JSON request payload"),
+    endpoint_name: Annotated[
+        str,
+        typer.Option("--endpoint-name", "-e", help="Endpoint to call"),
+    ] = ...,
+    deployment_name: Annotated[
+        str,
+        typer.Option("--deployment-name", "-d", help="Deployment slot name"),
+    ] = "blue",
+    request_file: Annotated[
+        Path,
+        typer.Option(
+            "--request-file",
+            "-r",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to JSON request payload",
+        ),
+    ] = DEFAULT_REQUEST_FILE,
 ) -> None:
     """Invoke a managed online endpoint deployment (smoke test)."""
     settings = get_settings().require_azure()
@@ -520,10 +667,9 @@ def serve_invoke(
     response = ml_client.online_endpoints.invoke(
         endpoint_name=endpoint_name,
         deployment_name=deployment_name,
-        request_file=request_file,
+        request_file=str(request_file),
     )
 
-    # echo response for CLI visibility
     typer.echo(response)
 
 
