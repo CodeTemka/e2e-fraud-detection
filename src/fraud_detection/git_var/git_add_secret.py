@@ -43,7 +43,7 @@ class GitHubSecretManager:
     repo: str
 
     @classmethod
-    def from_settings(cls, settings: Settings | None = None) -> "GitHubSecretManager":
+    def from_settings(cls, settings: Settings | None = None) -> GitHubSecretManager:
         cfg = (settings or get_settings()).require_github()
         return cls(
             token=require_setting(cfg.github_token, "GITHUB_TOKEN"),
@@ -120,4 +120,29 @@ def update_model_and_endpoint_secrets(
     manager.set_secret("ENDPOINT_NAME", endpoint_name)
 
 
-__all__ = ["GitHubSecretManager", "update_model_and_endpoint_secrets", "require_setting"]
+def update_compute_secrets(
+    *,
+    manager: GitHubSecretManager,
+    training_compute: str | None = None,
+    deployment_compute: str | None = None,
+    update_legacy_aml_compute: bool = True,
+) -> None:
+    """Update compute-related GitHub secrets for CI/CD workflows."""
+
+    if training_compute:
+        manager.set_secret("AML_COMPUTE_TRAIN", training_compute)
+        if update_legacy_aml_compute:
+            manager.set_secret("AML_COMPUTE", training_compute)
+
+    if deployment_compute:
+        manager.set_secret("AML_COMPUTE_DEPLOY", deployment_compute)
+        if update_legacy_aml_compute and not training_compute:
+            manager.set_secret("AML_COMPUTE", deployment_compute)
+
+
+__all__ = [
+    "GitHubSecretManager",
+    "update_model_and_endpoint_secrets",
+    "update_compute_secrets",
+    "require_setting",
+]
