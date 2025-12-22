@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Model
@@ -30,7 +30,7 @@ def collect_registered_models(
     models = list(ml_client.models.list())
     if name_prefix:
         models = [m for m in models if str(m.name).startswith(name_prefix)]
-
+    models = [m for m in models if "_output_mlflow_log_model_" not in str(m.name)]
     models.sort(key=lambda m: (str(m.name), str(m.version)))
     logger.info("Discovered registered models", extra={"count": len(models)})
     return models

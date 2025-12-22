@@ -279,7 +279,7 @@ def register_best_automl_model(
 
 
 @app.command()
-def endpoin_create(
+def endpoint_create(
     name: str = typer.Option(..., "--name", "-n", help="Name of the online endpoint to create."),
     description: str = typer.Option(None, "--description", "-d", help="Description of the online endpoint.")
 ):
@@ -351,9 +351,7 @@ def choose_one_registered_model(
     correct artifact.
     """
 
-    settings = get_settings()
-    settings.require_azure()
-    settings.require_github()
+    settings = get_settings().require_azure().require_github()
 
     ml_client = get_ml_client(settings=settings)
     models = collect_registered_models(ml_client, name_prefix=name_prefix)
@@ -419,23 +417,14 @@ def deploy(
     )
     typer.echo(f"Deployed model '{model_name}' to endpoint '{endpoint_name}' as deployment '{deployment.name}'.")
 
-DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
 
+DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
 
 @app.command()
 def serve_invoke(
-    endpoint_name: Annotated[str, typer.Option("--endpoint-name", help="Endpoint to call")],
-    deployment_name: Annotated[str, typer.Option("--deployment-name", help="Deployment slot name")] = "blue",
-    request_file: Annotated[
-        Path,
-        typer.Option(
-            "--request-file",
-            exists=True,
-            dir_okay=False,
-            readable=True,
-            help="Path to JSON request payload",
-        ),
-    ] = DEFAULT_REQUEST_FILE,
+    endpoint_name: str = typer.Option(..., "--endpoint-name", "-e", help="Endpoint to call"),
+    deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name"),
+    request_file: Path = typer.Option(DEFAULT_REQUEST_FILE, "--request-file", "-r", exists=True, dir_okay=False, readable=True, help="Path to JSON request payload"),
 ) -> None:
     """Invoke a managed online endpoint deployment (smoke test)."""
     settings = get_settings().require_azure()
