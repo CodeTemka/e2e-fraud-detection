@@ -9,17 +9,24 @@ from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Model
 
-from fraud_detection.training.automl import EXPERIMENT_ACCURACY, EXPERIMENT_RECALL
+from fraud_detection.training.automl import EXPERIMENT_PREFIX
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Keep yours (legacy + new)
+# Keep yours (legacy experiments)
 DEFAULT_EXPERIMENTS = [
     "automated-ml-classification-recall-experiment",
     "automated-ml-classification-experiment",
 ]
-NEW_EXPERIMENTS = [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY]
+
+
+def experiment_by_prefix(ml_client: MLClient, *, prefix: str) -> list[mlflow.entities.Experiment]:
+    """Return MLflow experiments whose names start with the given prefix."""
+
+    mlflow_tracking_uri(ml_client)
+    exps = mlflow.search_experiments()
+    return [exp for exp in exps if exp.name.startswith(prefix)]
 
 
 def _slug(s: str) -> str:
@@ -145,7 +152,8 @@ def register_best_child_run(
     skip_on_model_error: bool = False,
 ) -> Model | None:
     """Register the best child run from an AutoML parent job as an MLflow model."""
-    allowed_experiments = DEFAULT_EXPERIMENTS + NEW_EXPERIMENTS
+    discovered = [exp.experiment_name for exp in experiment_by_prefix(ml_client, prefix=EXPERIMENT_PREFIX)]
+    allowed_experiments = DEFAULT_EXPERIMENTS + discovered
     if experiment_name not in allowed_experiments:
         logger.error(
             "Input experiment name is not available",
@@ -214,7 +222,7 @@ def register_best_child_run(
 
 __all__ = [
     "DEFAULT_EXPERIMENTS",
-    "NEW_EXPERIMENTS",
+    "experiment_by_prefix",
     "list_completed_jobs",
     "list_completed_jobs_flat",
     "register_best_child_run",

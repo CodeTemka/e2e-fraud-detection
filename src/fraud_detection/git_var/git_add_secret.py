@@ -1,16 +1,30 @@
+"""Helpers for creating or updating GitHub Actions secrets.
+
+The CD pipeline relies on two secrets that can change frequently:
+
+``MODEL_NAME``
+    Stable Azure ML model name promoted for deployment.
+``ENDPOINT_NAME``
+    Target managed online endpoint name used during rollout.
+
+This module exposes a lightweight helper that encrypts and uploads those
+values (or any other secrets) using the GitHub REST API.
+"""
+from __future__ import annotations
+
 import base64
 import json
+from dataclasses import dataclass
+from typing import Any
 
 import requests
 from nacl import encoding, public
 
-from fraud_detection.config import get_settings
+from fraud_detection.config import Settings, get_settings
 from fraud_detection.utils.logging import get_logger
-from fraud_detection.serving.choose_model import ...
 
-settings = get_settings()
-settings.require_azure()
 logger = get_logger(__name__)
+
 
 def require_setting(value: str | None, env_var: str) -> str:
     """Return the required setting or raise a clear error."""
@@ -20,116 +34,90 @@ def require_setting(value: str | None, env_var: str) -> str:
     return value
 
 
-def optional_setting(value: str | None, env_var: str) -> str | None:
-    """Return the optional setting, logging a hint when absent."""
+@dataclass
+class GitHubSecretManager:
+    """Encrypt and upload GitHub Actions secrets for a repository."""
 
-    if value:
-        return value
+    token: str
+    owner: str
+    repo: str
 
-    logger.warning("Optional environment variable %s is not set; skipping.", env_var)
-    return None
+    @classmethod
+    def from_settings(cls, settings: Settings | None = None) -> "GitHubSecretManager":
+        cfg = (settings or get_settings()).require_github()
+        return cls(
+            token=require_setting(cfg.github_token, "GITHUB_TOKEN"),
+            owner=require_setting(cfg.github_owner, "GITHUB_OWNER"),
+            repo=require_setting(cfg.github_repo, "GITHUB_REPO"),
+        )
 
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "e2e-fraud-detection-secret-uploader",
+        }
 
-GITHUB_TOKEN = require_setting(settings.github_token, "GITHUB_TOKEN")
-OWNER = require_setting(settings.github_owner, "GITHUB_OWNER")
-REPO = require_setting(settings.github_repo, "GITHUB_REPO")
-SP_CREDENTIALS = 'sp_credentials.json'
+    def _get_public_key(self) -> tuple[str, str]:
+        url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/public-key"
+        response = requests.get(url, headers=self._headers, timeout=30)
 
-with open(SP_CREDENTIALS, encoding="utf-8") as f:
-    sp_credentials = json.load(f)
+        if response.status_code == 401:
+            raise PermissionError(
+                "Failed to authenticate with GitHub API. Verify that GITHUB_TOKEN has 'repo' and 'actions' scopes."
+            )
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to get public key: {response.text}")
 
-url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/public-key"
+        payload = response.json()
+        return payload["key_id"], payload["key"]
 
-headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json",
-    "User-Agent": "e2e-fraud-detection-secret-uploader",
-}
+    def _encrypt(self, public_key: str, value: str) -> str:
+        public_key_obj = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+        sealed_box = public.SealedBox(public_key_obj)
+        encrypted = sealed_box.encrypt(value.encode("utf-8"))
+        return base64.b64encode(encrypted).decode("utf-8")
 
-response = requests.get(url, headers=headers)
-if response.status_code == 401:
-    raise PermissionError(
-        "Failed to authenticate with GitHub API."
-        " Verify that GITHUB_TOKEN has 'repo' and 'actions' scopes."
-    )
-if response.status_code != 200:
-    raise Exception(f"Failed to get public key: {response.text}")
+    def secret_exists(self, secret_name: str) -> bool:
+        check_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/{secret_name}"
+        resp = requests.get(check_url, headers=self._headers, timeout=30)
+        return resp.status_code == 200
 
-public_key_id = response.json()["key_id"]
-public_key_str = response.json()["key"]
+    def set_secret(self, name: str, value: str | dict[str, Any]) -> None:
+        """Encrypt and upload a secret value (string or JSON-serializable mapping)."""
 
-public_key = public.PublicKey(public_key_str.encode("utf-8"), encoding.Base64Encoder())
-sealed_box = public.SealedBox(public_key)
+        if isinstance(value, dict):
+            value = json.dumps(value)
 
-workspace_location = require_setting(settings.location, "LOCATION")
-instance_type = settings.instance_type or "Standard_E4s_v3"
-instance_count = str(settings.instance_count or 1)
+        existed = self.secret_exists(name)
+        key_id, public_key = self._get_public_key()
+        encrypted_b64 = self._encrypt(public_key, value)
 
-tenant_id = require_setting(sp_credentials.get("tenantId"), "TENANTID")
-client_id = require_setting(sp_credentials.get("clientId"), "CLIENTID")
-client_secret = require_setting(sp_credentials.get("clientSecret"), "CLIENTSECRET")
-subscription_id = require_setting(sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID")
+        put_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/{name}"
+        payload = {"encrypted_value": encrypted_b64, "key_id": key_id}
 
-model_name = ...
-endpoint_name = ...
+        put_resp = requests.put(put_url, headers=self._headers, json=payload, timeout=30)
 
-required_secrets: dict[str, str | dict] = {
-    "SUBSCRIPTIONID": subscription_id,
-    "AZURE_CREDENTIALS": {
-        "clientSecret": client_secret,
-        "clientId": client_id,
-        "tenantId": tenant_id,
-        "subscriptionId": subscription_id,
-    },
-    "RESOURCE_GROUP": require_setting(settings.resource_group, "RESOURCE_GROUP"),
-    "WORKSPACE_NAME": require_setting(settings.workspace_name, "WORKSPACE_NAME"),
-    "LOCATION": workspace_location,
-    "AML_COMPUTE": require_setting(settings.default_compute, "AML_COMPUTE"),
-    "AML_DATASET": require_setting(settings.default_dataset, "AML_DATASET"),
-    "INSTANCE_TYPE": instance_type,
-    "INSTANCE_COUNT": instance_count,
-    "MODEL_NAME": model_name,
-    "ENDPOINT_NAME": endpoint_name,
-}
+        if put_resp.status_code not in (201, 204):
+            raise RuntimeError(
+                f"Failed to upload secret '{name}': {put_resp.status_code} - {put_resp.text}"
+            )
 
-optional_secrets = {
-    "KAGGLE_USERNAME": optional_setting(settings.kaggle_username, "KAGGLE_USERNAME"),
-    "KAGGLE_KEY": optional_setting(settings.kaggle_key, "KAGGLE_KEY"),
-}
-
-secrets: dict[str, str | dict] = {}
-secrets.update(required_secrets)
-for name, value in optional_secrets.items():
-    if value is not None:
-        secrets[name] = value
-
-
-def secret_exists(secret_name: str) -> bool:
-    check_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/{secret_name}"
-    resp = requests.get(check_url, headers=headers)
-    return resp.status_code == 200
-
-
-# Upload or update each secret
-for name, value in secrets.items():
-    existed = secret_exists(name)
-
-    # Encrypt secret
-    if isinstance(value, dict):
-        value = json.dumps(value)
-
-    encrypted = sealed_box.encrypt(value.encode("utf-8"))
-    encrypted_b64 = base64.b64encode(encrypted).decode("utf-8")
-
-    # Upload secret
-    put_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/secrets/{name}"
-    payload = {"encrypted_value": encrypted_b64, "key_id": public_key_id}
-    put_resp = requests.put(put_url, headers=headers, json=payload)
-
-    if put_resp.status_code in (201, 204):
         action = "updated" if existed else "created"
         logger.info("Secret '%s' %s successfully.", name, action)
-    else:
-        logger.error(
-            "Failed to upload %s: %s - %s", name, put_resp.status_code, put_resp.text
-        )
+
+
+def update_model_and_endpoint_secrets(
+    *,
+    manager: GitHubSecretManager,
+    model_name: str,
+    endpoint_name: str,
+) -> None:
+    """Update GitHub secrets required by the CD deployment workflow."""
+
+    manager.set_secret("MODEL_NAME", model_name)
+    manager.set_secret("ENDPOINT_NAME", endpoint_name)
+
+
+__all__ = ["GitHubSecretManager", "update_model_and_endpoint_secrets", "require_setting"]

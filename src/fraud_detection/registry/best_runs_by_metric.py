@@ -111,6 +111,12 @@ def experiments_by_prefix(
     return matched
 
 
+def experiment_by_prefix(ml_client: MLClient, *, prefix: str) -> list[Experiment]:
+    """Return MLflow experiments whose names start with the given prefix."""
+
+    return experiments_by_prefix(ml_client, prefixes=[prefix])
+
+
 def best_run_by_metric(
     ml_client: MLClient,
     *,
@@ -181,4 +187,11 @@ def best_run_by_metric(
     )
 
 
-__all__ = ["BestRun", "best_run_by_metric", "experiments_by_prefix", "AUTOML_RUN_LOGS", "AUTOML_DEFAULT_METRICS"]
+__all__ = [
+    "BestRun",
+    "best_run_by_metric",
+    "experiment_by_prefix",
+    "experiments_by_prefix",
+    "AUTOML_RUN_LOGS",
+    "AUTOML_DEFAULT_METRICS",
+]

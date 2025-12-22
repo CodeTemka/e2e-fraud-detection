@@ -112,7 +112,6 @@ __all__ = [
     "create_endpoint",
     "ensure_endpoint",
     "delete_endpoint",
-    "deploy_model",
     "update_traffic",
     "DEFAULT_AUTH_MODE",
 ]
