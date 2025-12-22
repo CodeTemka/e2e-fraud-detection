@@ -309,8 +309,8 @@ def choose_one_registered_model(): # Choose one registered model from registered
 
 @app.command()
 def deploy(
-    model_name: str = typer.Option(..., "--model-name", "-m", help="Name of the registered model to deploy."),
-    endpoint_name: str = typer.Option(..., "--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
+    model_name: str = typer.Option(None, "--model-name", "-m", help="Name of the registered model to deploy."),
+    endpoint_name: str = typer.Option(None, "--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
     deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name."),
     instance_type: str = typer.Option("Standard_DS3_v2", "--instance-type", "-it", help="Azure ML compute instance type."),
     instance_count: int = typer.Option(1, "--instance-count", "-ic", help="Number of instances to deploy."),
