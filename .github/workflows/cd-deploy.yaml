@@ -62,7 +62,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # azure-ai-ml supports up to Python 3.11 today
+          python-version: "3.11"
 
       - name: Upgrade pip and install build backend
         run: python -m pip install --upgrade pip build
@@ -116,26 +117,39 @@ jobs:
             workspace=$WORKSPACE_NAME
 
       - name: Register local fraud dataset (idempotent)
-        run: python scripts/register_data_asset.py register
+        run: |
+          fraud-cli register-local-data \
+            --path "data/creditcard.csv" \
+            --name "$AML_DATASET"
 
       - name: Promote latest AutoML job to stable model name
-        run: fraud-cli register-best-automl-model --model-name "$MODEL_NAME"
+        run: |
+          fraud-cli register-best-automl-model \
+            --best-by-metric \
+            --metric recall \
+            --model-name "$MODEL_NAME"
+
+      - name: Ensure online endpoint exists
+        run: |
+          fraud-cli endpoint-create \
+            --name "$ENDPOINT_NAME" \
+            --description "Fraud detection production endpoint"
 
       - name: Deploy latest model version to endpoint
         run: |
           fraud-cli deploy \
-            --strategy latest \
             --model-name "$MODEL_NAME" \
-            --endpoint "$ENDPOINT_NAME" \
-            --deployment "$DEPLOYMENT_NAME" \
+            --endpoint-name "$ENDPOINT_NAME" \
+            --deployment-name "$DEPLOYMENT_NAME" \
             --instance-type "${INSTANCE_TYPE:-Standard_E4s_v3}" \
             --instance-count "${INSTANCE_COUNT:-1}"
 
       - name: Smoke test deployed endpoint
         run: |
-          python scripts/test_deployment.py invoke \
+          fraud-cli serve-invoke \
             --endpoint-name "$ENDPOINT_NAME" \
-            --deployment-name "$DEPLOYMENT_NAME"
+            --deployment-name "$DEPLOYMENT_NAME" \
+            --request-file sample_request.json
 
       - name: Delete endpoint after one hour to control costs
         run: |

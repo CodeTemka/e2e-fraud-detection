@@ -3,7 +3,7 @@ name = "e2e-fraud-detection"
 version = "0.1.0"
 description = "End-to-end fraud detection workflows powered by Azure ML"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11,<3.12"
 authors = [{ name = "Temuulen Tuvshinjargal", email = "codetemuulen@gmail.com" }]
 
 dependencies = [
