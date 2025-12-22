@@ -97,12 +97,18 @@ def test_submit_automl_recall_uses_norm_macro_recall(monkeypatch):
         def require_azure(self):
             return self
 
+        @property
+        def training_compute(self):
+            return self.aml_compute
+
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+    monkeypatch.setattr(cli, "_compute_exists", lambda ml_client, name: True)
+    monkeypatch.setattr(cli, "ensure_training_compute", lambda *_, **__: None)
 
     def _automl_job_builder(**kwargs):
         captured["metric"] = kwargs["metric"]
-        return cli.AutoMLJobConfig(
+        return SimpleNamespace(
             experiment_name="exp",
             primary_metric="norm_macro_recall",
             compute="cpu-cluster",

@@ -47,6 +47,10 @@ def test_submit_automl_rejects_empty_dataset(monkeypatch):
         def require_azure(self):
             return self
 
+        @property
+        def training_compute(self):
+            return self.aml_compute
+
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
 
     create_called = False
@@ -73,6 +77,10 @@ def test_submit_automl_rejects_empty_compute(monkeypatch):
         def require_azure(self):
             return self
 
+        @property
+        def training_compute(self):
+            return self.aml_compute
+
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
 
     create_called = False
@@ -87,5 +95,5 @@ def test_submit_automl_rejects_empty_compute(monkeypatch):
     result = runner.invoke(cli.app, ["submit-automl", "--compute", ""])
 
     assert result.exit_code != 0
-    assert "Provide --compute or set AML_COMPUTE." in result.output
+    assert "Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE." in result.output
     assert create_called is False
