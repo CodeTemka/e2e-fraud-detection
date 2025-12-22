@@ -120,7 +120,9 @@ jobs:
         run: |
           fraud-cli register-local-data \
             --path "data/creditcard.csv" \
-            --name "$AML_DATASET"
+            --name "$AML_DATASET" \
+            --version "1" \
+            --description "Credit card fraud detection dataset (from Kaggle)"
 
       - name: Promote latest AutoML job to stable model name
         run: |
@@ -141,7 +143,7 @@ jobs:
             --model-name "$MODEL_NAME" \
             --endpoint-name "$ENDPOINT_NAME" \
             --deployment-name "$DEPLOYMENT_NAME" \
-            --instance-type "${INSTANCE_TYPE:-Standard_E4s_v3}" \
+            --instance-type "${INSTANCE_TYPE:-Standard_DS3_v2}" \
             --instance-count "${INSTANCE_COUNT:-1}"
 
       - name: Smoke test deployed endpoint
