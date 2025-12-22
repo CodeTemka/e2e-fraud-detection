@@ -96,7 +96,7 @@ def _metric_col(metric: str | Sequence[str]) -> str | list[str]:
 def experiments_by_prefix(
     ml_client: MLClient,
     *,
-    prefixes: Sequence[str],
+    prefixes: Sequence[str] | str,
 ) -> list[Experiment]:
     """Return MLflow experiments whose names start with any given prefix."""
     mlflow_tracking_uri(ml_client)

@@ -18,8 +18,16 @@ from fraud_detection.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Stable experiment names per metric (NOT tied to a specific algorithm)
-EXPERIMENT_RECALL = "automl-fraud-recall"
-EXPERIMENT_ACCURACY = "automl-fraud-accuracy"
+EXPERIMENT_PREFIX = "automl-fraud-"
+
+# Supported metrics for Azure AutoML classification jobs (your strict list)
+SUPPORTED_CLASSIFICATION_METRICS: set[str] = {
+    "accuracy",
+    "AUC_weighted",
+    "average_precision_score_weighted",
+    "norm_macro_recall",
+    "precision_score_weighted",
+}
 
 
 def _slug(s: str) -> str:
@@ -128,55 +136,45 @@ def submit_job(ml_client: MLClient, job: Any) -> str:
     return returned_job.name
 
 
-def accuracy_job(
-    settings: Settings,
+def _metric_check(metric: str | ClassificationPrimaryMetrics) -> str:
+    """Validate metric strictly against supported list; return the metric string."""
+    metric_str = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
+
+    if metric_str not in SUPPORTED_CLASSIFICATION_METRICS:
+        allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS))
+        raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
+
+    return metric_str
+
+
+def automl_job_builder(
     *,
+    metric: str | ClassificationPrimaryMetrics,
     training_data: str,
     compute: str,
     allowed_algorithms: list[str] | None = None,
 ) -> AutoMLJobConfig:
-    """Preconfigured job optimized for accuracy (optionally restrict algorithms)."""
+    """Generic job builder based on specified metric (optionally restrict algorithms)."""
+    resolved_metric = _metric_check(metric)
+
+    # Use metric string for experiment/job naming (clean + stable)
+    metric_slug = _slug(resolved_metric)
+
     return AutoMLJobConfig(
-        experiment_name=EXPERIMENT_ACCURACY,
-        primary_metric=ClassificationPrimaryMetrics.ACCURACY,
+        experiment_name=f"{EXPERIMENT_PREFIX}{metric_slug}",
+        primary_metric=resolved_metric,
         compute=compute,
         training_data=training_data,
         cross_validations=5,
         allowed_algorithms=allowed_algorithms,
         tags={
             "project": "fraud-detection",
-            "metric": "accuracy",
+            "metric": resolved_metric,
             "git_sha": _get_git_sha(),
             "allowed_algorithms": ",".join(allowed_algorithms) if allowed_algorithms else "auto",
         },
         max_trials=80,
-        job_name=_build_job_name(metric="accuracy"),
-    )
-
-
-def recall_job(
-    settings: Settings,
-    *,
-    training_data: str,
-    compute: str,
-    allowed_algorithms: list[str] | None = None,
-) -> AutoMLJobConfig:
-    """Preconfigured job optimized for norm-macro-recall (optionally restrict algorithms)."""
-    return AutoMLJobConfig(
-        experiment_name=EXPERIMENT_RECALL,
-        primary_metric="norm_macro_recall",
-        compute=compute,
-        training_data=training_data,
-        cross_validations=5,
-        allowed_algorithms=allowed_algorithms,
-        tags={
-            "project": "fraud-detection",
-            "metric": "recall",
-            "git_sha": _get_git_sha(),
-            "allowed_algorithms": ",".join(allowed_algorithms) if allowed_algorithms else "auto",
-        },
-        max_trials=80,
-        job_name=_build_job_name(metric="recall"),
+        job_name=_build_job_name(metric=metric_slug),
     )
 
 
@@ -184,8 +182,7 @@ __all__ = [
     "AutoMLJobConfig",
     "create_automl_job",
     "submit_job",
-    "accuracy_job",
-    "recall_job",
-    "EXPERIMENT_RECALL",
-    "EXPERIMENT_ACCURACY",
+    "automl_job_builder",
+    "EXPERIMENT_PREFIX",
+    "SUPPORTED_CLASSIFICATION_METRICS",
 ]

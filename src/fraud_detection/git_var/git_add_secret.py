@@ -4,8 +4,9 @@ import json
 import requests
 from nacl import encoding, public
 
-from fraud_detection.config import get_settings  # noqa: E402
-from fraud_detection.utils.logging import get_logger  # noqa: E402
+from fraud_detection.config import get_settings
+from fraud_detection.utils.logging import get_logger
+from fraud_detection.serving.choose_model import ...
 
 settings = get_settings()
 settings.require_azure()
@@ -69,10 +70,10 @@ client_id = require_setting(sp_credentials.get("clientId"), "CLIENTID")
 client_secret = require_setting(sp_credentials.get("clientSecret"), "CLIENTSECRET")
 subscription_id = require_setting(sp_credentials.get("subscriptionId"), "SUBSCRIPTIONID")
 
+model_name = ...
+endpoint_name = ...
+
 required_secrets: dict[str, str | dict] = {
-    "TENANTID": tenant_id,
-    "CLIENTID": client_id,
-    "CLIENTSECRET": client_secret,
     "SUBSCRIPTIONID": subscription_id,
     "AZURE_CREDENTIALS": {
         "clientSecret": client_secret,
@@ -87,6 +88,8 @@ required_secrets: dict[str, str | dict] = {
     "AML_DATASET": require_setting(settings.default_dataset, "AML_DATASET"),
     "INSTANCE_TYPE": instance_type,
     "INSTANCE_COUNT": instance_count,
+    "MODEL_NAME": model_name,
+    "ENDPOINT_NAME": endpoint_name,
 }
 
 optional_secrets = {

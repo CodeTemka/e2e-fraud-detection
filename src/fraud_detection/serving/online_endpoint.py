@@ -78,46 +78,6 @@ def delete_endpoint(ml_client: MLClient, *, endpoint_name: str) -> None:
     ml_client.online_endpoints.begin_delete(name=endpoint_name).result()
 
 
-def deploy_model(
-    ml_client: MLClient,
-    *,
-    endpoint_name: str,
-    deployment_name: str,
-    model_name: str,
-    model_version: str,
-    instance_type: str,
-    instance_count: int = 1,
-    tags: Mapping[str, str] | None = None,
-) -> ManagedOnlineDeployment:
-    """Deploy a registered model to an existing managed online endpoint."""
-    if instance_count < 1:
-        raise ValueError("instance_count must be >= 1")
-
-    model = ml_client.models.get(name=model_name, version=model_version)
-
-    deployment = ManagedOnlineDeployment(
-        name=deployment_name,
-        endpoint_name=endpoint_name,
-        model=model,
-        instance_type=instance_type,
-        instance_count=instance_count,
-        tags=dict(tags) if tags else {"project": "fraud-detection"},
-    )
-
-    logger.info(
-        "Creating/updating deployment",
-        extra={
-            "endpoint_name": endpoint_name,
-            "deployment_name": deployment_name,
-            "model_name": model_name,
-            "model_version": model_version,
-            "instance_type": instance_type,
-            "instance_count": instance_count,
-        },
-    )
-    return ml_client.online_deployments.begin_create_or_update(deployment).result()
-
-
 def update_traffic(ml_client: MLClient, *, endpoint_name: str, traffic: dict[str, int]) -> None:
     """Update traffic allocation for deployments on an endpoint."""
     _validate_traffic(traffic)
