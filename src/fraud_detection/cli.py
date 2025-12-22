@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
 import pandas as pd
 import typer
@@ -18,18 +17,14 @@ from fraud_detection.data.data_validation import (
     ValidationOptions,
     validate_creditcard_data,
 )
-from fraud_detection.training.automl import (
-    EXPERIMENT_PREFIX,
-    SUPPORTED_CLASSIFICATION_METRICS,
-    AutoMLJobConfig,
-    automl_job_builder,
-    create_automl_job,
-    submit_job,
+from fraud_detection.git_var.git_add_secret import (
+    GitHubSecretManager,
+    update_compute_secrets,
+    update_model_and_endpoint_secrets,
 )
 from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
     register_best_child_run,
-    DEFAULT_EXPERIMENTS,
 )
 from fraud_detection.registry.best_runs_by_metric import (
     BestRun,
@@ -37,24 +32,32 @@ from fraud_detection.registry.best_runs_by_metric import (
     experiment_by_prefix,
 )
 from fraud_detection.registry.register_from_run import register_model_from_run
+from fraud_detection.serving.choose_model import (
+    build_registered_models_table,
+    choose_registered_model,
+    collect_registered_models,
+)
 from fraud_detection.serving.deploy import deploy_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
     delete_endpoint,
     update_traffic,
 )
-from fraud_detection.serving.choose_model import (
-    build_registered_models_table,
-    choose_registered_model,
-    collect_registered_models,
+from fraud_detection.training.automl import (
+    EXPERIMENT_PREFIX,
+    SUPPORTED_CLASSIFICATION_METRICS,
+    automl_job_builder,
+    create_automl_job,
+    submit_job,
 )
-from fraud_detection.git_var.git_add_secret import (
-    GitHubSecretManager,
-    update_model_and_endpoint_secrets,
+from fraud_detection.training.compute import (
+    ensure_deployment_compute,
+    ensure_training_compute,
 )
-
+from fraud_detection.utils.logging import get_logger
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
+logger = get_logger(__name__)
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -84,8 +87,49 @@ def _load_local_table(path: str, *, sample_rows: int | None = None) -> pd.DataFr
         if sample_rows is not None:
             tbl = tbl.take(int(sample_rows))
         return tbl.to_pandas_dataframe()
-    
+
     raise ValueError("Unsupported path. Provide a .csv file or a folder containing an MLTable file.")
+
+
+def _compute_exists(ml_client, name: str) -> bool:
+    try:
+        ml_client.compute.get(name)
+        return True
+    except ResourceNotFoundError:
+        return False
+
+
+def _safe_update_compute_secret(
+    *,
+    settings,
+    training_compute: str | None = None,
+    deployment_compute: str | None = None,
+) -> None:
+    """Best-effort update of GitHub secrets for new compute resources."""
+
+    if not (
+        settings.github_token
+        and settings.github_owner
+        and settings.github_repo
+    ):
+        logger.info(
+            "Skipping GitHub secret update; GitHub settings not configured",
+            extra={"training_compute": training_compute, "deployment_compute": deployment_compute},
+        )
+        return
+
+    try:
+        manager = GitHubSecretManager.from_settings(settings)
+        update_compute_secrets(
+            manager=manager,
+            training_compute=training_compute,
+            deployment_compute=deployment_compute,
+        )
+    except Exception as exc:  # pragma: no cover - best effort secret update
+        logger.warning(
+            "Failed to update GitHub secrets for compute",
+            extra={"error": str(exc), "training_compute": training_compute, "deployment_compute": deployment_compute},
+        )
 
 
 def _validate_local_dataset(
@@ -170,6 +214,13 @@ def submit_automl(
     metric: str = typer.Option('recall', "--metric", "-m", help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}", case_sensitive=False),
     dataset: str = typer.Option(None, help="Override the MLTable asset path (can be local)."), # This is questionable.
     compute: str = typer.Option(None, help="Override the Azure ML compute target name."), # And also this one.
+    compute_size: str = typer.Option(
+        "Standard_DS3_v2",
+        "--compute-size",
+        help="VM size for the training compute cluster.",
+    ),
+    min_nodes: int = typer.Option(0, "--min-nodes", help="Minimum node count for training compute."),
+    max_nodes: int = typer.Option(2, "--max-nodes", help="Maximum node count for training compute."),
     algorithms: list[str] | None = typer.Option(
         None,
         "--algorithms",
@@ -182,18 +233,31 @@ def submit_automl(
     settings = get_settings().require_azure()
 
     training_data = dataset or settings.aml_dataset
-    compute_target = compute or settings.aml_compute
+    compute_target = compute or settings.training_compute
 
     if not training_data:
         raise typer.BadParameter("Provide --dataset or set AML_DATASET.")
 
     if not compute_target:
-        raise typer.BadParameter("Provide --compute or set AML_COMPUTE.")
+        raise typer.BadParameter("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.")
 
     #Note: CD pipeline will always validate the dataset before submitting the job. So we skip local validation here.
 
+    ml_client = get_ml_client(settings=settings)
+    compute_preexists = _compute_exists(ml_client, compute_target)
+    ensure_training_compute(
+        ml_client,
+        name=compute_target,
+        size=compute_size,
+        min_instances=min_nodes,
+        max_instances=max_nodes,
+    )
+
+    if not compute_preexists:
+        _safe_update_compute_secret(settings=settings, training_compute=compute_target)
+
     allowed_algorithms = _normalize_algorithms(algorithms)
-    
+
     automl_job_config = automl_job_builder(
         metric=metric,
         training_data=training_data,
@@ -202,7 +266,6 @@ def submit_automl(
     )
 
     job = create_automl_job(config=automl_job_config)
-    ml_client = get_ml_client(settings=settings)
     job_name = submit_job(ml_client=ml_client, job=job)
     typer.echo(f"Submitted AutoML job: {job_name}")
 
@@ -391,13 +454,32 @@ def deploy(
     model_name: str = typer.Option(None, "--model-name", "-m", help="Name of the registered model to deploy."),
     endpoint_name: str = typer.Option(None, "--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
     deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name."),
+    compute: str = typer.Option(None, "--compute", "-c", help="Compute cluster name to ensure for deployment."),
     instance_type: str = typer.Option("Standard_DS3_v2", "--instance-type", "-it", help="Azure ML compute instance type."),
     instance_count: int = typer.Option(1, "--instance-count", "-ic", help="Number of instances to deploy."),
+    compute_min_nodes: int = typer.Option(0, "--compute-min-nodes", help="Minimum nodes for the deployment compute cluster."),
+    compute_max_nodes: int = typer.Option(1, "--compute-max-nodes", help="Maximum nodes for the deployment compute cluster."),
     tags: list[str] = typer.Option(None, "--tag", "-t", help="Tags to apply to the deployment (repeatable key=value)."),
 ):
     """Deploy a registered model to a managed online endpoint."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
+
+    compute_target = compute or settings.deployment_compute
+    if not compute_target:
+        raise typer.BadParameter("Provide --compute or set AML_COMPUTE_DEPLOY/AML_COMPUTE for deployment compute creation.")
+
+    compute_preexists = _compute_exists(ml_client, compute_target)
+    ensure_deployment_compute(
+        ml_client,
+        name=compute_target,
+        size=instance_type,
+        min_instances=compute_min_nodes,
+        max_instances=compute_max_nodes,
+    )
+
+    if not compute_preexists:
+        _safe_update_compute_secret(settings=settings, deployment_compute=compute_target)
 
     tag_mapping: dict[str, str] = {}
     for tag in tags or []:

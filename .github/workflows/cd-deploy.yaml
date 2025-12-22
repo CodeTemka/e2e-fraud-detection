@@ -40,7 +40,9 @@ jobs:
       RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
       WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
       LOCATION: ${{ secrets.LOCATION }}
-      AML_COMPUTE: ${{ secrets.AML_COMPUTE }}
+      AML_COMPUTE_TRAIN: ${{ secrets.AML_COMPUTE_TRAIN }}
+      AML_COMPUTE_DEPLOY: ${{ secrets.AML_COMPUTE_DEPLOY }}
+      AML_COMPUTE: ${{ secrets.AML_COMPUTE_TRAIN || secrets.AML_COMPUTE }}
       AML_DATASET: ${{ secrets.AML_DATASET }}
       INSTANCE_TYPE: ${{ secrets.INSTANCE_TYPE }}
       INSTANCE_COUNT: ${{ secrets.INSTANCE_COUNT }}
@@ -76,7 +78,7 @@ jobs:
         run: |
           required_vars=(
             AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_SUBSCRIPTION_ID
-            RESOURCE_GROUP WORKSPACE_NAME LOCATION AML_COMPUTE AML_DATASET
+            RESOURCE_GROUP WORKSPACE_NAME LOCATION AML_DATASET
           )
 
           missing=()
@@ -85,6 +87,14 @@ jobs:
               missing+=("$var")
             fi
           done
+
+          if [ -z "${AML_COMPUTE_TRAIN}" ] && [ -z "${AML_COMPUTE}" ]; then
+            missing+=("AML_COMPUTE_TRAIN or AML_COMPUTE")
+          fi
+
+          if [ -z "${AML_COMPUTE_DEPLOY}" ] && [ -z "${AML_COMPUTE}" ]; then
+            missing+=("AML_COMPUTE_DEPLOY or AML_COMPUTE")
+          fi
 
           if [ ${#missing[@]} -ne 0 ]; then
             echo "Missing required secrets: ${missing[*]}" >&2

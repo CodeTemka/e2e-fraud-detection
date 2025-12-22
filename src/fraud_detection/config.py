@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
     workspace_name: str | None = Field(None, alias="WORKSPACE_NAME")
     location: str | None = Field(None, alias="LOCATION")
+    aml_compute_train: str | None = Field(None, alias="AML_COMPUTE_TRAIN")
+    aml_compute_deploy: str | None = Field(None, alias="AML_COMPUTE_DEPLOY")
     aml_compute: str | None = Field(None, alias="AML_COMPUTE")
     aml_dataset: str | None = Field(None, alias="AML_DATASET")
 
@@ -82,13 +84,24 @@ class Settings(BaseSettings):
     
     def require_training(self) -> Settings:
         """ Ensure all settings required for training are provided. """
-        return self._require(
-            {
-                "aml_compute": "AML_COMPUTE",
-                "aml_dataset": "AML_DATASET",
-            },
-            context="Training",
-        )
+        required: dict[str, str] = {"aml_dataset": "AML_DATASET"}
+
+        if not (self.aml_compute_train or self.aml_compute):
+            required["aml_compute_train"] = "AML_COMPUTE_TRAIN or AML_COMPUTE"
+
+        return self._require(required, context="Training")
+
+    @property
+    def training_compute(self) -> str | None:
+        """Return preferred training compute (new env var first, fallback to legacy)."""
+
+        return self.aml_compute_train or self.aml_compute
+
+    @property
+    def deployment_compute(self) -> str | None:
+        """Return preferred deployment compute (new env var first, fallback to training/legacy)."""
+
+        return self.aml_compute_deploy or self.aml_compute_train or self.aml_compute
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
