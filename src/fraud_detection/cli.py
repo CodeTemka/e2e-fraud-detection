@@ -31,20 +31,30 @@ from fraud_detection.registry.automl_registry import (
     register_best_child_run,
     DEFAULT_EXPERIMENTS,
 )
-from fraud_detection.registry.best_runs_by_metric import experiment_by_prefix, best_run_by_metric, BestRun
+from fraud_detection.registry.best_runs_by_metric import (
+    BestRun,
+    best_run_by_metric,
+    experiment_by_prefix,
+)
 from fraud_detection.registry.register_from_run import register_model_from_run
-from fraud_detection.serving.deploy import deploy_best_by_metric, deploy_latest_model
+from fraud_detection.serving.deploy import deploy_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
     delete_endpoint,
-    deploy_model,
     update_traffic,
+)
+from fraud_detection.serving.choose_model import (
+    build_registered_models_table,
+    choose_registered_model,
+    collect_registered_models,
+)
+from fraud_detection.git_var.git_add_secret import (
+    GitHubSecretManager,
+    update_model_and_endpoint_secrets,
 )
 
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
-
-NEW_AUTOML_ EXPERIMENTS= [EXPERIMENT_RECALL, EXPERIMENT_ACCURACY] # search experiments starts with automl-fraud- ...
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -122,13 +132,13 @@ def register_local_data(
     )
 
     try:
-        ml_client.dat.get(name=name, version=version)
+        ml_client.data.get(name=name, version=version)
         typer.echo(f"Data asset '{name}' version '{version}' already exists in Azure ML.")
         return
     except ResourceNotFoundError:
         pass
 
-    ml_client.dat.create_or_update(data_asset)
+    ml_client.data.create_or_update(data_asset)
     typer.echo(f"Registered data asset '{name}' version '{version}' to Azure ML.")
 
 
@@ -174,6 +184,12 @@ def submit_automl(
     training_data = dataset or settings.aml_dataset
     compute_target = compute or settings.aml_compute
 
+    if not training_data:
+        raise typer.BadParameter("Provide --dataset or set AML_DATASET.")
+
+    if not compute_target:
+        raise typer.BadParameter("Provide --compute or set AML_COMPUTE.")
+
     #Note: CD pipeline will always validate the dataset before submitting the job. So we skip local validation here.
 
     allowed_algorithms = _normalize_algorithms(algorithms)
@@ -205,15 +221,18 @@ def register_best_automl_model(
 
     if best_by_metric:
         try:
-            best_run : BestRun = best_run_by_metric(
+            best_run: BestRun = best_run_by_metric(
                 ml_client=ml_client,
-                experiment_prefix=experiment or EXPERIMENT_PREFIX,
+                experiment_prefixes=[experiment or EXPERIMENT_PREFIX],
                 metric=metric,
+                view_type=ViewType.ALL,
             )
-            typer.echo(f"Found best model by metric: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}.")
+            typer.echo(
+                f"Found best model by metric: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}."
+            )
         except Exception as e:
             raise typer.Exit(code=1) from e
-        
+
         try:
             register_model_from_run(
                 ml_client=ml_client,
@@ -221,31 +240,42 @@ def register_best_automl_model(
                 run_id=best_run.run_id,
                 description=f"Best child run model by {best_run.metric_name}={best_run.metric_value}",
             )
-            typer.echo(f"Registered best child run model: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}.")
+            typer.echo(
+                f"Registered best child run model: {best_run.metric_name}={best_run.metric_value} from run {best_run.run_id} in experiment {best_run.experiment_name}."
+            )
         except Exception as e:
             raise typer.Exit(code=1) from e
 
     elif best_child_run:
-        exps = experiment_by_prefix(ml_client, prefixes=experiment or EXPERIMENT_PREFIX)
+        prefix = experiment if experiment else EXPERIMENT_PREFIX
+        exps = experiment_by_prefix(ml_client, prefix=prefix)
         exp_names = [e.experiment_name for e in exps]
+
+        if not exp_names:
+            typer.echo("No AutoML experiments found for the given prefix.")
+            raise typer.Exit(code=0)
+
         experiments = experiment or exp_names
-        
+
         completed = list_completed_jobs(ml_client=ml_client, experiments=experiments)
         if not completed:
             typer.echo("No completed AutoML jobs found for the given experiment prefix.")
             raise typer.Exit(code=0)
-        
-        for job_name, experiment_name in completed.items():
-            model = register_best_child_run(
-                ml_client=ml_client,
-                job_name=job_name,
-                experiment_name=experiment_name,
-                model_name=model_name,
-            )
-            if isinstance(model, Model):
-                typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")
-            else:
-                typer.echo(f"Skipped registration for job '{job_name}'.")
+
+        for exp_name, jobs in completed.items():
+            for job_name in jobs:
+                model = register_best_child_run(
+                    ml_client=ml_client,
+                    job_name=job_name,
+                    experiment_name=exp_name,
+                    model_name=model_name,
+                )
+                if isinstance(model, Model):
+                    typer.echo(
+                        f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'."
+                    )
+                else:
+                    typer.echo(f"Skipped registration for job '{job_name}'.")
 
 
 @app.command()
@@ -281,7 +311,7 @@ def endpoint_delete(
 @app.command()
 def endpoint_traffic(
     endpoint: str = typer.Option(..., "--endpoint", "-e", help="Name of the online endpoint to update."),
-    traffic: list[str] = typer.option(..., "--traffic", "-t", help="Traffic mapping like blue=100 green=0 (repeatable)"),
+    traffic: list[str] = typer.Option(..., "--traffic", "-t", help="Traffic mapping like blue=100 green=0 (repeatable)"),
 ):
     """Update endpoint traffic split. Traffic must sum to 100%."""
     settings = get_settings().require_azure()
@@ -303,8 +333,59 @@ def endpoint_traffic(
 
 
 @app.command()
-def choose_one_registered_model(): # Choose one registered model from registered models in azure ml and store the metadata in github secrets.
-    ...
+def choose_one_registered_model(
+    endpoint_name: str = typer.Option(
+        "fraud-detection-prod",
+        "--endpoint-name",
+        "-e",
+        help="Managed online endpoint to target in the CD pipeline.",
+    ),
+    name_prefix: str | None = typer.Option(
+        None, "--name-prefix", help="Optional prefix to filter registered models."
+    ),
+):
+    """Pick a registered Azure ML model and store its name for deployment.
+
+    The chosen model name and endpoint name are written to GitHub Actions
+    secrets (MODEL_NAME and ENDPOINT_NAME) so the CD workflow deploys the
+    correct artifact.
+    """
+
+    settings = get_settings()
+    settings.require_azure()
+    settings.require_github()
+
+    ml_client = get_ml_client(settings=settings)
+    models = collect_registered_models(ml_client, name_prefix=name_prefix)
+
+    if not models:
+        typer.echo("No registered models found in the workspace.")
+        raise typer.Exit(code=1)
+
+    typer.echo("Available registered models:")
+    for line in build_registered_models_table(models):
+        typer.echo(line)
+
+    selection = typer.prompt(
+        "Enter the number of the model to promote for deployment",
+        type=int,
+    )
+
+    try:
+        chosen = choose_registered_model(models, selection)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    secrets_manager = GitHubSecretManager.from_settings(settings)
+    update_model_and_endpoint_secrets(
+        manager=secrets_manager,
+        model_name=chosen.name,
+        endpoint_name=endpoint_name,
+    )
+
+    typer.echo(
+        f"Selected model '{chosen.name}' (version {chosen.version}) for endpoint '{endpoint_name}'. GitHub secrets updated."
+    )
 
 
 @app.command()
@@ -314,11 +395,18 @@ def deploy(
     deployment_name: str = typer.Option("blue", "--deployment-name", "-d", help="Deployment slot name."),
     instance_type: str = typer.Option("Standard_DS3_v2", "--instance-type", "-it", help="Azure ML compute instance type."),
     instance_count: int = typer.Option(1, "--instance-count", "-ic", help="Number of instances to deploy."),
-    tags: list[str] = typer.Option(None, "--tag", "-t", help="Tags to apply to the deployment (repeatable)."),
-): 
+    tags: list[str] = typer.Option(None, "--tag", "-t", help="Tags to apply to the deployment (repeatable key=value)."),
+):
     """Deploy a registered model to a managed online endpoint."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
+
+    tag_mapping: dict[str, str] = {}
+    for tag in tags or []:
+        if "=" not in tag:
+            raise typer.BadParameter(f"Invalid tag '{tag}'. Use key=value format.")
+        key, value = tag.split("=", 1)
+        tag_mapping[key.strip()] = value.strip()
 
     deployment = deploy_model(
         ml_client,
@@ -327,13 +415,10 @@ def deploy(
         model_name=model_name,
         instance_type=instance_type,
         instance_count=instance_count,
-        tags=dict(tags) if tags else {"project": "fraud-detection"},
+        tags=tag_mapping or {"project": "fraud-detection"},
     )
     typer.echo(f"Deployed model '{model_name}' to endpoint '{endpoint_name}' as deployment '{deployment.name}'.")
 
-
-
-ROOT_DIR = Path(__file__).resolve().parents[2]  # repo root for src/ layout
 DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
 
 
