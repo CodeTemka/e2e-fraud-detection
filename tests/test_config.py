@@ -22,8 +22,8 @@ def test_settings_loads_env(monkeypatch):
     assert settings.subscription_id == "sub-id"
     assert settings.resource_group == "rg"
     assert settings.workspace_name == "ws"
-    assert settings.aml_compute == "cpu-cluster"
-    assert settings.aml_dataset == "azureml:dataset:1"
+    assert settings.compute_cluster == "cpu-cluster"
+    assert settings.dataset_name == "azureml:dataset:1"
 
 
 def test_settings_allows_missing_azure_env(monkeypatch):

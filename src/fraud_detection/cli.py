@@ -8,10 +8,9 @@ import pandas as pd
 import typer
 from azure.ai.ml.entities import Model
 from azure.core.exceptions import ResourceNotFoundError
-from mlflow.entities import ViewType
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import get_settings
+from fraud_detection.config import Settings, get_settings
 from fraud_detection.data.data_validation import (
     DataValidationError,
     ValidationOptions,
@@ -21,17 +20,10 @@ from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
     register_best_child_run,
 )
-from fraud_detection.registry.best_runs_by_metric import (
-    AUTOML_DEFAULT_METRICS_BARE
-)
+from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS_BARE
 from fraud_detection.registry.prod_model_by_metric import register_prod_model
-from fraud_detection.registry.automl_registry import register_model_from_run
 from fraud_detection.serving.deploy import deploy_model
-from fraud_detection.serving.online_endpoint import (
-    create_endpoint,
-    delete_endpoint,
-    update_traffic,
-)
+from fraud_detection.serving.online_endpoint import create_endpoint, delete_endpoint
 from fraud_detection.training.automl import (
     SUPPORTED_CLASSIFICATION_METRICS,
     automl_job_builder,
@@ -47,8 +39,13 @@ from fraud_detection.utils.logging import get_logger
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 logger = get_logger(__name__)
 
-settings = get_settings().require_azure()
-ML_CLIENT = get_ml_client(settings=settings)
+def _resolve_settings(*, require_azure: bool = False) -> Settings:
+    settings = get_settings()
+    return settings.require_azure() if require_azure else settings
+
+
+def _resolve_ml_client(settings: Settings) -> object:
+    return get_ml_client(settings=settings)
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -104,7 +101,7 @@ def _validate_local_dataset(
 #This function should be more like validate data for training jobs.
 @app.command()
 def validate_data(
-    path = settings.local_data_path,
+    path: str | None = None,
     sample_rows: Annotated[
         int | None,
         typer.Option(
@@ -133,9 +130,11 @@ def validate_data(
     ] = 0.02,
 ):
     """Validate a local fraud dataset (CSV or MLTable folder)."""
+    settings = _resolve_settings()
+    resolved_path = str(path or settings.local_data_path)
     try:
         _validate_local_dataset(
-            path=path,
+            path=resolved_path,
             skip_balance_check=skip_balance_check,
             balance_lower=balance_lower,
             balance_upper=balance_upper,
@@ -159,7 +158,15 @@ def submit_automl(
             help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
             case_sensitive=False,
         ),
-    ] = settings.default_metric,
+    ] = None,
+    dataset: Annotated[
+        str | None,
+        typer.Option("--dataset", help="Azure ML dataset name or ID to use for training."),
+    ] = None,
+    compute: Annotated[
+        str | None,
+        typer.Option("--compute", help="Azure ML compute cluster name for training."),
+    ] = None,
     algorithms: Annotated[
         list[str] | None,
         typer.Option(
@@ -170,10 +177,12 @@ def submit_automl(
     ] = None,
 ):
     """Submit an AutoML classification job for fraud detection."""
-    ml_client = ML_CLIENT
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
 
-    training_data = settings.dataset_name
-    compute_target = settings.compute_cluster
+    resolved_metric = metric or settings.default_metric
+    training_data = dataset if dataset is not None else settings.dataset_name
+    compute_target = compute if compute is not None else settings.compute_cluster
 
     if not training_data:
         typer.echo("Provide --dataset or set AML_DATASET.", err=True)
@@ -195,7 +204,7 @@ def submit_automl(
     allowed_algorithms = _normalize_algorithms(algorithms)
 
     automl_job_config = automl_job_builder(
-        metric=metric,
+        metric=resolved_metric,
         training_data=training_data,
         compute=compute_target,
         allowed_algorithms=allowed_algorithms,
@@ -228,16 +237,10 @@ def register_best_automl_model(
     ] = True,
 ):
     """Register the best AutoML child run model or the best AutoML model by metric."""
-    ml_client = ML_CLIENT
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
     experiment = settings.automl_train_exp
-    if best_by_metric:
-        try:
-            register_prod_model(metric = metric)
-        except Exception:
-            typer.echo("Couldn't register the model")
-            raise typer.Exit(code=0)
-
-    elif best_child_run:
+    if best_child_run:
         completed = list_completed_jobs(ml_client=ml_client, experiments=experiment)
         if not completed:
             typer.echo("No completed AutoML jobs found for the given experiment prefix.")
@@ -248,19 +251,30 @@ def register_best_automl_model(
                 model = register_best_child_run(
                     ml_client=ml_client,
                     job_name=job_name,
+                    experiment=exp_name,
+                    settings=settings,
                 )
                 if isinstance(model, Model):
                     typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")
                 else:
                     typer.echo(f"Skipped registration for job '{job_name}'.")
+        return
+
+    if best_by_metric:
+        try:
+            model_name = register_prod_model(metric=metric, ml_client=ml_client, settings=settings)
+        except (RuntimeError, ValueError, KeyError) as exc:
+            logger.error("Couldn't register production model", extra={"error": str(exc)})
+            raise typer.Exit(code=1) from exc
+        typer.echo(f"Registered model '{model_name}' based on metric '{metric}'.")
 
 
 
 @app.command()
 def endpoint_create():
     """Create a managed online endpoint."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
     name = settings.endpoint_name
     ep = create_endpoint(
         ml_client,
@@ -274,8 +288,8 @@ def endpoint_create():
 @app.command()
 def endpoint_delete():
     """Delete a managed online endpoint."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
     name = settings.endpoint_name
     delete_endpoint(ml_client, name=name)
     typer.echo(f"Deleted online endpoint '{name}'")
@@ -286,8 +300,8 @@ def endpoint_delete():
 @app.command()
 def deploy():
     """Deploy a registered model to a managed online endpoint."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
     compute_target = settings.compute_cluster
     instance_type = settings.instance_type
     instance_count = settings.instance_count
@@ -320,8 +334,8 @@ def deploy():
 @app.command()
 def serve_invoke():
     """Invoke a managed online endpoint deployment (smoke test)."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
+    settings = _resolve_settings(require_azure=True)
+    ml_client = _resolve_ml_client(settings)
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     request_file = settings.smoke_test

@@ -12,8 +12,8 @@ from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
 from azure.ai.ml.constants import AssetTypes
 
-from fraud_detection.utils.logging import get_logger
 from fraud_detection.config import get_settings
+from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

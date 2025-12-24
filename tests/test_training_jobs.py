@@ -41,17 +41,15 @@ def test_list_completed_jobs_filters_on_status_and_experiment():
 
 def test_submit_automl_rejects_empty_dataset(monkeypatch):
     class FakeSettings:
-        aml_dataset = None
-        aml_compute = "cpu-cluster"
+        dataset_name = "azureml:demo:1"
+        compute_cluster = "cpu-cluster"
+        default_metric = "norm_macro_recall"
 
         def require_azure(self):
             return self
 
-        @property
-        def training_compute(self):
-            return self.aml_compute
-
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
 
     create_called = False
 
@@ -71,17 +69,15 @@ def test_submit_automl_rejects_empty_dataset(monkeypatch):
 
 def test_submit_automl_rejects_empty_compute(monkeypatch):
     class FakeSettings:
-        aml_dataset = "azureml:demo:1"
-        aml_compute = None
+        dataset_name = "azureml:demo:1"
+        compute_cluster = "cpu-cluster"
+        default_metric = "norm_macro_recall"
 
         def require_azure(self):
             return self
 
-        @property
-        def training_compute(self):
-            return self.aml_compute
-
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
 
     create_called = False
 

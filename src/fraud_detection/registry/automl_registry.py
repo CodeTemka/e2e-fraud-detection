@@ -12,12 +12,10 @@ from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Model
 
-from fraud_detection.config import get_settings
+from fraud_detection.config import Settings, get_settings
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-settings = get_settings()
 
 
 def _model_name(job_run: str) -> str:
@@ -92,18 +90,17 @@ def register_model_from_run(
 def register_best_child_run(
     ml_client: MLClient,
     *,
-    experiment: str | None,
+    experiment: str | None = None,
     job_name: str,
+    settings: Settings | None = None,
 ) -> Model | None:
     """Register the best child run from an AutoML parent job as an MLflow model."""
-    experiment_name = settings.automl_train_exp
+    experiment_name = experiment or (settings or get_settings()).automl_train_exp
+    if not experiment_name:
+        raise ValueError("experiment is required when no default experiment is configured.")
 
     # Configure MLflow tracking URI
-    try:
-        mlflow_tracking_uri(ml_client)
-    except Exception as ex:
-        logger.exception("Failed to configure MLflow tracking uri for Azure ML")
-        raise RuntimeError("Failed to configure MLflow tracking uri") from ex
+    mlflow_tracking_uri(ml_client)
 
     # Verify job belongs to experiment and is completed
     completed_jobs = list_completed_jobs(ml_client, experiment_name)
@@ -129,23 +126,17 @@ def register_best_child_run(
 
     resolved_model_name = _model_name(best_child_run)
 
-    # FIX: call register_model_from_run (not register_best_child_run recursively)
-    try:
-        model = register_model_from_run(
-            ml_client,
-            model_name=resolved_model_name,
-            best_child_run=best_child_run,
-            description="AutoML classification model registered from best child run",
-            tags={
-                "experiment_name": experiment_name,
-                "parent_job_name": job_name,
-                "best_child_run_id": best_child_run,
-            },
-        )
-    except Exception:
-        msg = "Failed to register model from best child run"
-        logger.exception(msg)
-        raise RuntimeError(msg)
+    model = register_model_from_run(
+        ml_client,
+        model_name=resolved_model_name,
+        best_child_run=best_child_run,
+        description="AutoML classification model registered from best child run",
+        tags={
+            "experiment_name": experiment_name,
+            "parent_job_name": job_name,
+            "best_child_run_id": best_child_run,
+        },
+    )
 
     return model
 
