@@ -96,14 +96,6 @@ def _load_local_table(path: str, *, sample_rows: int | None = None) -> pd.DataFr
     raise ValueError("Unsupported path. Provide a .csv file or a folder containing an MLTable file.")
 
 
-def _compute_exists(ml_client, name: str) -> bool:
-    try:
-        ml_client.compute.get(name)
-        return True
-    except ResourceNotFoundError:
-        return False
-
-
 # I guess, cli.py doesn't need this function.
 def _validate_local_dataset(
     *,
@@ -180,27 +172,7 @@ def submit_automl(
             help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
             case_sensitive=False,
         ),
-    ] = "recall",
-    dataset: Annotated[
-        str | None,
-        typer.Option(help="Override the MLTable asset path (can be local)."),
-    ] = None,
-    compute: Annotated[
-        str | None,
-        typer.Option(help="Override the Azure ML compute target name."),
-    ] = None,
-    compute_size: Annotated[
-        str,
-        typer.Option("--compute-size", help="VM size for the training compute cluster."),
-    ] = "Standard_DS3_v2",
-    min_nodes: Annotated[
-        int,
-        typer.Option("--min-nodes", help="Minimum node count for training compute."),
-    ] = 0,
-    max_nodes: Annotated[
-        int,
-        typer.Option("--max-nodes", help="Maximum node count for training compute."),
-    ] = 2,
+    ] = settings.default_metric,
     algorithms: Annotated[
         list[str] | None,
         typer.Option(
@@ -211,10 +183,10 @@ def submit_automl(
     ] = None,
 ):
     """Submit an AutoML classification job for fraud detection."""
-    settings = get_settings().require_azure()
+    ml_client = ML_CLIENT
 
-    training_data = dataset or settings.aml_dataset
-    compute_target = compute or settings.training_compute
+    training_data = settings.dataset_name
+    compute_target = settings.compute_cluster
 
     if not training_data:
         typer.echo("Provide --dataset or set AML_DATASET.", err=True)
@@ -224,15 +196,13 @@ def submit_automl(
         typer.echo("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.", err=True)
         raise typer.Exit(code=1)
 
-    ml_client = get_ml_client(settings=settings)
-    compute_preexists = _compute_exists(ml_client, compute_target)
 
     ensure_training_compute(
         ml_client,
         name=compute_target,
-        size=compute_size,
-        min_instances=min_nodes,
-        max_instances=max_nodes,
+        size=settings.instance_type,
+        min_instances=settings.compute_min_nodes,
+        max_instances=settings.compute_max_nodes,
     )
 
     allowed_algorithms = _normalize_algorithms(algorithms)
@@ -252,14 +222,6 @@ def submit_automl(
 
 @app.command()
 def register_best_automl_model(
-    experiment: Annotated[
-        str | None,
-        typer.Option(
-            "--experiment",
-            "-e",
-            help="Experiment name prefix to search for AutoML jobs (default: all auotoml jobs).",
-        ),
-    ] = None,
     metric: Annotated[
         str,
         typer.Option(
@@ -268,7 +230,7 @@ def register_best_automl_model(
             help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
             case_sensitive=False,
         ),
-    ] = "recall",
+    ] = "norm-macro-recall",
     model_name: Annotated[
         str | None,
         typer.Option(
@@ -286,9 +248,8 @@ def register_best_automl_model(
     ] = False,
 ):
     """Register the best AutoML child run model or the best AutoML model by metric."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
-
+    ml_client = ML_CLIENT
+    experiment = settings.automl_train_exp
     if best_by_metric:
         try:
             best_run: BestRun = best_run_by_metric(
@@ -419,7 +380,7 @@ def serve_invoke():
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     request_file = settings.smoke_test
-    
+
     try:
         ml_client.online_endpoints.get(endpoint_name)
     except ResourceNotFoundError as exc:
