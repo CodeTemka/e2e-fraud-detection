@@ -39,7 +39,12 @@ pip install -e .[dev]
 ## 🚀 Usage
 Register the local credit card dataset as an Azure ML data asset (defaults to `data/creditcard.csv`):
 ```bash
-python scripts/register_data_asset.py register
+python scripts/register_local_data.py
+```
+
+Validate a local dataset before uploading/training:
+```bash
+fraud-cli validate-data --sample-rows 2000
 ```
 
 Submit an AutoML job (recall-optimized by default):
@@ -49,12 +54,24 @@ fraud-cli submit-automl --metric recall
 
 Force an accuracy-focused LightGBM-only search:
 ```bash
-fraud-cli submit-automl --metric accuracy
+fraud-cli submit-automl --metric accuracy --algorithms lightgbm
 ```
 
-Register the best child run as an MLflow model for each completed experiment:
+Register the best model for the current AutoML experiment:
 ```bash
-fraud-cli register-models
+fraud-cli register-best-automl-model --best-by-metric --metric norm-macro-recall
+```
+
+Register the best child run for each completed AutoML job:
+```bash
+fraud-cli register-best-automl-model --best-child-run
+```
+
+Create an online endpoint, deploy the production model, and invoke it:
+```bash
+fraud-cli endpoint-create
+fraud-cli deploy
+fraud-cli serve-invoke
 ```
 
 ## ✅ Testing & Linting
