@@ -4,15 +4,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import mlflow
-from azure.ai.ml import MLClient
 from mlflow.entities import ViewType
 
-
+from fraud_detection.config import Settings, get_settings
 from fraud_detection.utils.logging import get_logger
-from fraud_detection.config import get_settings
 
 logger = get_logger(__name__)
-settings = get_settings()
 
 AUTOML_RUN_LOGS = ['run_id', 'experiment_id', 'status', 'artifact_uri', 'start_time',
        'end_time', 'metrics.weighted_accuracy', 'metrics.AUC_micro',
@@ -100,12 +97,16 @@ def best_run_by_metric(
     metric: str | Sequence[str],
     direction: str = "max",  # "max" or "min"
     view_type: ViewType = ViewType.ACTIVE_ONLY,
+    experiment_name: str | None = None,
+    settings: Settings | None = None,
 ) -> BestRun:
-    """Find the best run (by a metric) across experiments whose names match prefixes."""
+    """Find the best run (by a metric) within an AutoML experiment."""
     if direction not in ("max", "min"):
         raise ValueError("direction must be 'max' or 'min'")
 
-    experiment = settings.automl_train_exp
+    resolved_experiment = experiment_name or (settings or get_settings()).automl_train_exp
+    if not resolved_experiment:
+        raise ValueError("experiment_name is required when no default is configured.")
     col = _metric_col(metric)
 
     ascending = True if direction == "min" else False
@@ -113,7 +114,7 @@ def best_run_by_metric(
 
     # MLflow returns a DataFrame
     df = mlflow.search_runs(
-        experiment_names=experiment,
+        experiment_names=[resolved_experiment],
         run_view_type=view_type,
     )
 

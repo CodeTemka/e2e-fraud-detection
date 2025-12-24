@@ -1,10 +1,9 @@
 """Register a production model from AutoML experiment based on a metric comparison."""
 from __future__ import annotations
 
-from typing import Optional
-
 import mlflow
 from azure.ai.ml import MLClient
+from azure.core.exceptions import HttpResponseError
 from mlflow.tracking import MlflowClient
 
 from fraud_detection.azure.client import get_ml_client
@@ -21,18 +20,25 @@ def _shadow_model_name(run_id: str) -> str:
     return f"model_{run_id}"
 
 
+def _parse_version(version: str | None) -> int:
+    try:
+        return int(version or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _latest_model_asset(ml_client: MLClient, name: str):
     """Return latest AzureML model asset (highest numeric version) or None."""
     try:
         models = list(ml_client.models.list(name=name))
-    except Exception as e:
-        logger.debug("Failed listing models for name=%s: %s", name, e)
+    except HttpResponseError as exc:
+        logger.debug("Failed listing models for name=%s: %s", name, exc)
         return None
 
     if not models:
         return None
 
-    return max(models, key=lambda m: int(m.version))
+    return max(models, key=lambda m: _parse_version(getattr(m, "version", None)))
 
 
 def _get_run_metric(run_id: str, metric: str) -> float:
@@ -48,7 +54,7 @@ def current_prod_model_metric(
     metric: str,
     *,
     settings: Settings | None = None,
-) -> Optional[float]:
+) -> float | None:
     """
     Return the metric value for the latest registered production model version.
 
@@ -100,8 +106,10 @@ def register_prod_model(
     cfg = settings or get_settings()
     ml_client = ml_client or get_ml_client(settings=cfg.require_azure())
 
+    mlflow_tracking_uri(ml_client)
+
     # Best run in the AutoML experiment for the metric
-    best: BestRun = best_run_by_metric(metric=metric)
+    best: BestRun = best_run_by_metric(metric=metric, settings=cfg)
     best_run_id = best.run_id
 
     # Current prod metric (if any)
@@ -120,7 +128,18 @@ def register_prod_model(
         best_run_id,
     )
 
-    register_model_from_run(ml_client, chosen_name, best_run_id)
+    register_model_from_run(
+        ml_client,
+        model_name=chosen_name,
+        best_child_run=best_run_id,
+        description="AutoML classification model registered by metric comparison",
+        tags={
+            "experiment_name": cfg.automl_train_exp,
+            "selected_metric": metric,
+            "best_run_id": best_run_id,
+            "promotion": str(should_promote),
+        },
+    )
     return chosen_name
 
 

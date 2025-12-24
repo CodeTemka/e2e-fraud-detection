@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from pydantic import Field
+from typing import ClassVar
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
@@ -31,7 +33,10 @@ class Settings(BaseSettings):
     kaggle_key: str | None = Field(None, alias="KAGGLE_KEY")
 
     # Default dataset
-    dataset_name: str = "credit-card-data"
+    dataset_name: str = Field(
+        default="credit-card-data",
+        validation_alias=AliasChoices("AML_DATASET", "DATASET_NAME"),
+    )
     local_data_path: Path = ROOT_DIR / "data" / "creditcard.csv"
 
     # Default model
@@ -45,7 +50,10 @@ class Settings(BaseSettings):
     # Default compute
     instance_type: str = "Standard_DS3_v2"
     instance_count: int = 1
-    compute_cluster: str = ""
+    compute_cluster: str = Field(
+        default="",
+        validation_alias=AliasChoices("AML_COMPUTE_TRAIN", "AML_COMPUTE", "COMPUTE_CLUSTER"),
+    )
     compute_min_nodes: int = 0
     compute_max_nodes: int = 2
 
@@ -58,7 +66,7 @@ class Settings(BaseSettings):
     # Default smoke test json
     smoke_test: Path = ROOT_DIR / "sample_request.json"
 
-    def _require(self, required: dict[str, str], *, context: str) -> "Settings":
+    def _require(self, required: dict[str, str], *, context: str) -> Settings:
         missing = [env for attr, env in required.items() if not getattr(self, attr)]
         if missing:
             raise ValueError(
@@ -66,7 +74,7 @@ class Settings(BaseSettings):
             )
         return self
 
-    def require_azure(self) -> "Settings":
+    def require_azure(self) -> Settings:
         return self._require(
             {
                 "subscription_id": "SUBSCRIPTION_ID",
@@ -77,7 +85,7 @@ class Settings(BaseSettings):
             context="Azure",
         )
 
-    def require_github(self) -> "Settings":
+    def require_github(self) -> Settings:
         return self._require(
             {
                 "github_token": "GITHUB_TOKEN",
@@ -87,7 +95,7 @@ class Settings(BaseSettings):
             context="Github",
         )
 
-    def require_kaggle(self) -> "Settings":
+    def require_kaggle(self) -> Settings:
         return self._require(
             {
                 "kaggle_username": "KAGGLE_USERNAME",

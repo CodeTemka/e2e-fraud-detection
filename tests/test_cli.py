@@ -10,6 +10,8 @@ def test_register_models_registers_best_child_run(monkeypatch):
     captured = {}
 
     class FakeSettings:
+        automl_train_exp = "automl-fraud-accuracy"
+
         def require_azure(self):
             return self
 
@@ -18,20 +20,16 @@ def test_register_models_registers_best_child_run(monkeypatch):
             self.name = "model-name"
             self.version = "1"
 
-    class FakeExperiment:
-        experiment_name = "automl-fraud-accuracy"
-
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
     monkeypatch.setattr(cli, "Model", FakeModel)
-    monkeypatch.setattr(cli, "experiment_by_prefix", lambda _ml, prefix: [FakeExperiment()])
 
     def _list_completed_jobs(ml_client=None, experiments=None):
         captured["experiments"] = experiments
         return {"automl-fraud-accuracy": ["job-123"]}
 
-    def _register_best_child_run(ml_client=None, job_name=None, experiment_name=None, model_name=None):
-        captured.setdefault("registrations", []).append((job_name, experiment_name, model_name))
+    def _register_best_child_run(ml_client=None, job_name=None, experiment=None, settings=None):
+        captured.setdefault("registrations", []).append((job_name, experiment))
         return FakeModel()
 
     monkeypatch.setattr(cli, "list_completed_jobs", _list_completed_jobs)
@@ -43,74 +41,65 @@ def test_register_models_registers_best_child_run(monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert captured["experiments"] == ["automl-fraud-accuracy"]
-    assert captured["registrations"] == [("job-123", "automl-fraud-accuracy", None)]
+    assert captured["experiments"] == "automl-fraud-accuracy"
+    assert captured["registrations"] == [("job-123", "automl-fraud-accuracy")]
     assert "Registered model 'model-name' version '1' from job 'job-123'." in result.output
 
 
 def test_register_models_best_by_metric(monkeypatch):
     runner = CliRunner()
+    captured = {}
 
     class FakeSettings:
+        automl_train_exp = "automl-fraud-accuracy"
+
         def require_azure(self):
             return self
 
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
 
-    best_run = cli.BestRun(
-        experiment_name="automl-fraud-accuracy",
-        run_id="run-1",
-        metric_name="recall",
-        metric_value=0.9,
-    )
-
-    captured = {}
-
-    monkeypatch.setattr(cli, "best_run_by_metric", lambda **kwargs: best_run)
-
-    def fake_register(**kwargs):
+    def fake_register_prod_model(**kwargs):
         captured.update(kwargs)
-        return None
+        return "production-model"
 
-    monkeypatch.setattr(cli, "register_model_from_run", fake_register)
+    monkeypatch.setattr(cli, "register_prod_model", fake_register_prod_model)
 
     result = runner.invoke(
         cli.app,
-        ["register-best-automl-model", "--best-by-metric", "--metric", "recall"],
+        ["register-best-automl-model", "--best-by-metric", "--metric", "AUC_micro"],
     )
 
     assert result.exit_code == 0
-    assert captured["run_id"] == "run-1"
-    assert captured["model_name"] == "automl-fraud-accuracy-best-child-model"
-    assert "Found best model by metric" in result.output
+    assert captured["metric"] == "AUC_micro"
+    assert captured["settings"].automl_train_exp == "automl-fraud-accuracy"
+    assert "Registered model 'production-model' based on metric 'AUC_micro'." in result.output
 
 
-def test_submit_automl_recall_uses_norm_macro_recall(monkeypatch):
+def test_submit_automl_uses_defaults(monkeypatch):
     runner = CliRunner()
     captured = {}
 
     class FakeSettings:
-        aml_dataset = "azureml:dataset:1"
-        aml_compute = "cpu-cluster"
+        dataset_name = "azureml:dataset:1"
+        compute_cluster = "cpu-cluster"
+        default_metric = "norm_macro_recall"
+        instance_type = "Standard_DS3_v2"
+        compute_min_nodes = 0
+        compute_max_nodes = 2
 
         def require_azure(self):
             return self
 
-        @property
-        def training_compute(self):
-            return self.aml_compute
-
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
-    monkeypatch.setattr(cli, "_compute_exists", lambda ml_client, name: True)
     monkeypatch.setattr(cli, "ensure_training_compute", lambda *_, **__: None)
 
     def _automl_job_builder(**kwargs):
         captured["metric"] = kwargs["metric"]
         return SimpleNamespace(
             experiment_name="exp",
-            primary_metric="norm_macro_recall",
+            primary_metric=kwargs["metric"],
             compute="cpu-cluster",
             training_data="azureml:dataset:1",
         )
@@ -128,10 +117,10 @@ def test_submit_automl_recall_uses_norm_macro_recall(monkeypatch):
     monkeypatch.setattr(cli, "create_automl_job", _create_automl_job)
     monkeypatch.setattr(cli, "submit_job", _submit_job)
 
-    result = runner.invoke(cli.app, ["submit-automl", "--metric", "recall"])
+    result = runner.invoke(cli.app, ["submit-automl"])
 
     assert result.exit_code == 0
-    assert captured["metric"] == "recall"
+    assert captured["metric"] == "norm_macro_recall"
     assert captured["primary_metric"] == "norm_macro_recall"
     assert captured["submitted_job"] == {"job": "definition"}
     assert "Submitted AutoML job: run-123" in result.output
