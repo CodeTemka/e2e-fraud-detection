@@ -1,24 +1,20 @@
-""" Configuration settings for the fraud detection module. """
 from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
-    """ Application wide settings loaded from environment variables. """
-
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore",  # ignore unknown env vars instead of erroring
+        extra="ignore",
     )
-    
+
     # Azure
     subscription_id: str | None = Field(None, alias="SUBSCRIPTION_ID")
     resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
@@ -43,40 +39,34 @@ class Settings(BaseSettings):
     prod_model_name: str = "production-model"
 
     # Default experiments
-    custom_train_exp = 'custom-train'
-    automl_train_exp = 'automl-train'
+    custom_train_exp: str = "custom-train"
+    automl_train_exp: str = "automl-train"
 
     # Default compute
-    instance_type = "Standard_DS3_v2"
-    instance_count = 1
-    compute_cluster = ''
-    compute_min_nodes = 0
-    compute_max_nodes = 2
+    instance_type: str = "Standard_DS3_v2"
+    instance_count: int = 1
+    compute_cluster: str = ""
+    compute_min_nodes: int = 0
+    compute_max_nodes: int = 2
 
     # Default endpoint
-    endpoint_name = "fraud-detection"
+    endpoint_name: str = "fraud-detection"
 
     # Default deployment
-    deployment_name = 'blue'
+    deployment_name: str = "blue"
 
     # Default smoke test json
-    smoke_test = ROOT_DIR / "sample_request.json"
+    smoke_test: Path = ROOT_DIR / "sample_request.json"
 
-
-    def _require(self, required: dict[str, str], *, context: str) -> Settings:
-        """ Internal helper to enforce required settings. """
-
+    def _require(self, required: dict[str, str], *, context: str) -> "Settings":
         missing = [env for attr, env in required.items() if not getattr(self, attr)]
-
         if missing:
             raise ValueError(
                 f"Missing required environment variables for {context}: {', '.join(missing)}"
             )
         return self
-    
-    
-    def require_azure(self) -> Settings:
-        """ Ensure Azure-specific settings are provided. """
+
+    def require_azure(self) -> "Settings":
         return self._require(
             {
                 "subscription_id": "SUBSCRIPTION_ID",
@@ -86,10 +76,8 @@ class Settings(BaseSettings):
             },
             context="Azure",
         )
-    
 
-    def require_github(self) -> Settings:
-        """ Ensure Github-specific settings are provided. """
+    def require_github(self) -> "Settings":
         return self._require(
             {
                 "github_token": "GITHUB_TOKEN",
@@ -98,10 +86,8 @@ class Settings(BaseSettings):
             },
             context="Github",
         )
-    
-    
-    def require_kaggle(self) -> Settings:
-        """ Ensure Kaggle-specific settings are provided. """
+
+    def require_kaggle(self) -> "Settings":
         return self._require(
             {
                 "kaggle_username": "KAGGLE_USERNAME",
@@ -109,12 +95,8 @@ class Settings(BaseSettings):
             },
             context="Kaggle",
         )
-    
-    
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """ Get the application settings with caching. """
     return Settings()
-
-
-__all__ = ["get_settings", "Settings"]

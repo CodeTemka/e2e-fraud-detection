@@ -1,125 +1,100 @@
-"""Helpers for creating or updating GitHub Actions secrets."""
 from __future__ import annotations
 
 import base64
 import json
-from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
 from nacl import encoding, public
 
 from fraud_detection.config import Settings, get_settings
-from fraud_detection.utils.logging import get_logger
-
-logger = get_logger(__name__)
 
 
-def require_setting(value: str | None, env_var: str) -> str:
-    """Return the required setting or raise a clear error."""
-
-    if not value:
-        raise ValueError(f"Missing required environment variable: {env_var}")
-    return value
-
-
-@dataclass
-class GitHubSecretManager:
-    """Encrypt and upload GitHub Actions secrets for a repository."""
-
-    token: str
-    owner: str
-    repo: str
-
-    @classmethod
-    def from_settings(cls, settings: Settings | None = None) -> GitHubSecretManager:
-        cfg = (settings or get_settings()).require_github()
-        return cls(
-            token=require_setting(cfg.github_token, "GITHUB_TOKEN"),
-            owner=require_setting(cfg.github_owner, "GITHUB_OWNER"),
-            repo=require_setting(cfg.github_repo, "GITHUB_REPO"),
-        )
-
-    @property
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "e2e-fraud-detection-secret-uploader",
-        }
-
-    def _get_public_key(self) -> tuple[str, str]:
-        url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/public-key"
-        response = requests.get(url, headers=self._headers, timeout=30)
-
-        if response.status_code == 401:
-            raise PermissionError(
-                "Failed to authenticate with GitHub API. Verify that GITHUB_TOKEN has 'repo' and 'actions' scopes."
-            )
-        if response.status_code != 200:
-            raise RuntimeError(f"Failed to get public key: {response.text}")
-
-        payload = response.json()
-        return payload["key_id"], payload["key"]
-
-    def _encrypt(self, public_key: str, value: str) -> str:
-        public_key_obj = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
-        sealed_box = public.SealedBox(public_key_obj)
-        encrypted = sealed_box.encrypt(value.encode("utf-8"))
-        return base64.b64encode(encrypted).decode("utf-8")
-
-    def secret_exists(self, secret_name: str) -> bool:
-        check_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/{secret_name}"
-        resp = requests.get(check_url, headers=self._headers, timeout=30)
-        return resp.status_code == 200
-
-    def set_secret(self, name: str, value: str | dict[str, Any]) -> None:
-        """Encrypt and upload a secret value (string or JSON-serializable mapping)."""
-
-        if isinstance(value, dict):
-            value = json.dumps(value)
-
-        existed = self.secret_exists(name)
-        key_id, public_key = self._get_public_key()
-        encrypted_b64 = self._encrypt(public_key, value)
-
-        put_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/actions/secrets/{name}"
-        payload = {"encrypted_value": encrypted_b64, "key_id": key_id}
-
-        put_resp = requests.put(put_url, headers=self._headers, json=payload, timeout=30)
-
-        if put_resp.status_code not in (201, 204):
-            raise RuntimeError(
-                f"Failed to upload secret '{name}': {put_resp.status_code} - {put_resp.text}"
-            )
-
-        action = "updated" if existed else "created"
-        logger.info("Secret '%s' %s successfully.", name, action)
-
-with open("sp_credentials.json", "r") as f:
-    sp_credentials = json.load(f)
-
-def update_azure_credentials(manager: GitHubSecretManager,) -> None:
-    """Update compute-related GitHub secrets for CI/CD workflows."""
-
-    client_id = sp_credentials.get("clientId")
-    tenant_id = sp_credentials.get("tenantId")
-    client_secret = sp_credentials.get("clientSecret")
-    subscription_id = sp_credentials.get("subscriptionId")
-
-    if not all([client_id, tenant_id, client_secret, subscription_id]):
-        raise ValueError("Missing required service principal credentials in sp_credentials.json")
-    
-    azure_credentials = {
-        "clientSecret": client_secret,
-        "subscriptionId": subscription_id,
-        "tenantId": tenant_id,
-        "clientId": client_id
+def _headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"token {token}",  # most compatible
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "e2e-fraud-detection-secret-uploader",
     }
 
-    manager.set_secret("AZURE_CREDENTIALS", azure_credentials)
+
+def _get_public_key(owner: str, repo: str, token: str) -> tuple[str, str]:
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/secrets/public-key"
+    r = requests.get(url, headers=_headers(token), timeout=30)
+
+    if r.status_code in (401, 403):
+        raise PermissionError("GitHub token is not authorized to manage secrets for this repo.")
+    if r.status_code != 200:
+        raise RuntimeError(f"Failed to get public key: {r.status_code} - {r.text}")
+
+    data = r.json()
+    return data["key_id"], data["key"]  # key is base64
+
+
+def _encrypt(public_key_b64: str, plaintext: str) -> str:
+    pk = public.PublicKey(public_key_b64.encode("utf-8"), encoding.Base64Encoder())
+    sealed = public.SealedBox(pk)
+    encrypted_bytes = sealed.encrypt(plaintext.encode("utf-8"))
+    return base64.b64encode(encrypted_bytes).decode("utf-8")
+
+
+def set_github_secret(
+    name: str,
+    value: str | dict[str, Any],
+    *,
+    settings: Settings | None = None,
+) -> None:
+    cfg = (settings or get_settings()).require_github()
+
+    token = cfg.github_token or ""
+    owner = cfg.github_owner or ""
+    repo = cfg.github_repo or ""
+
+    if isinstance(value, dict):
+        value = json.dumps(value)
+
+    key_id, public_key = _get_public_key(owner, repo, token)
+    encrypted_value = _encrypt(public_key, value)
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/secrets/{name}"
+    payload = {"encrypted_value": encrypted_value, "key_id": key_id}
+    r = requests.put(url, headers=_headers(token), json=payload, timeout=30)
+
+    if r.status_code not in (201, 204):
+        raise RuntimeError(f"Failed to upload secret '{name}': {r.status_code} - {r.text}")
+
+    print(f"OK: secret '{name}' uploaded.")
+
+
+def update_azure_credentials_secret(sp_path: Path = Path("sp_credentials.json")) -> None:
+    sp = json.loads(sp_path.read_text(encoding="utf-8"))
+
+    # supports common Azure outputs
+    client_id = sp.get("clientId") or sp.get("appId")
+    tenant_id = sp.get("tenantId")
+    client_secret = sp.get("clientSecret") or sp.get("password")
+    subscription_id = sp.get("subscriptionId")
+
+    missing = [k for k, v in {
+        "clientId/appId": client_id,
+        "tenantId": tenant_id,
+        "clientSecret/password": client_secret,
+        "subscriptionId": subscription_id,
+    }.items() if not v]
+    if missing:
+        raise ValueError(f"Missing fields in {sp_path}: {', '.join(missing)}")
+
+    azure_credentials = {
+        "clientId": client_id,
+        "clientSecret": client_secret,
+        "tenantId": tenant_id,
+        "subscriptionId": subscription_id,
+    }
+
+    set_github_secret("AZURE_CREDENTIALS", azure_credentials)
 
 
 if __name__ == "__main__":
-    secret_manager = GitHubSecretManager.from_settings()
-    update_azure_credentials(secret_manager)
+    update_azure_credentials_secret()
