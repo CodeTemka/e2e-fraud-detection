@@ -30,10 +30,7 @@ from fraud_detection.training.automl import (
     create_automl_job,
     submit_job,
 )
-from fraud_detection.training.compute import (
-    ensure_deployment_compute,
-    ensure_training_compute,
-)
+from fraud_detection.training.compute import ensure_training_compute
 from fraud_detection.utils.logging import get_logger
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
@@ -165,7 +162,7 @@ def submit_automl(
     ] = None,
     compute: Annotated[
         str | None,
-        typer.Option("--compute", help="Azure ML compute cluster name for training."),
+        typer.Option("--compute", help="Azure ML compute cluster name for training (optional override)."),
     ] = None,
     algorithms: Annotated[
         list[str] | None,
@@ -182,14 +179,15 @@ def submit_automl(
 
     resolved_metric = metric or settings.default_metric
     training_data = dataset if dataset is not None else settings.dataset_name
-    compute_target = compute if compute is not None else settings.compute_cluster
+    compute_value = compute.strip() if isinstance(compute, str) else None
+    try:
+        compute_target = compute_value or settings.get_training_compute()
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
     if not training_data:
         typer.echo("Provide --dataset or set AML_DATASET.", err=True)
-        raise typer.Exit(code=1)
-
-    if not compute_target:
-        typer.echo("Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE.", err=True)
         raise typer.Exit(code=1)
 
 
@@ -302,23 +300,15 @@ def deploy():
     """Deploy a registered model to a managed online endpoint."""
     settings = _resolve_settings(require_azure=True)
     ml_client = _resolve_ml_client(settings)
-    compute_target = settings.compute_cluster
-    instance_type = settings.instance_type
+    try:
+        instance_type = settings.get_deployment_instance_type()
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     instance_count = settings.instance_count
-    compute_min_nodes = settings.compute_min_nodes
-    compute_max_nodes = settings.compute_max_nodes
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     model_name = settings.prod_model_name
-
-
-    ensure_deployment_compute(
-        ml_client,
-        name=compute_target,
-        size=instance_type,
-        min_instances=compute_min_nodes,
-        max_instances=compute_max_nodes,
-    )
 
     deployment = deploy_model(
         ml_client,

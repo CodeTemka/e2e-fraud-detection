@@ -11,6 +11,7 @@ def test_settings_loads_env(monkeypatch):
     monkeypatch.setenv("WORKSPACE_NAME", "ws")
     monkeypatch.setenv("LOCATION", "eastus")
     monkeypatch.setenv("AML_COMPUTE", "cpu-cluster")
+    monkeypatch.setenv("DEPLOYMENT_INSTANCE_TYPE", "Standard_D2_v2")
     monkeypatch.setenv("AML_DATASET", "azureml:dataset:1")
     monkeypatch.setenv("GITHUB_OWNER", "octocat")
     monkeypatch.setenv("GITHUB_REPO", "fraud")
@@ -22,7 +23,9 @@ def test_settings_loads_env(monkeypatch):
     assert settings.subscription_id == "sub-id"
     assert settings.resource_group == "rg"
     assert settings.workspace_name == "ws"
+    assert settings.training_compute == "cpu-cluster"
     assert settings.compute_cluster == "cpu-cluster"
+    assert settings.deployment_instance_type == "Standard_D2_v2"
     assert settings.dataset_name == "azureml:dataset:1"
 
 

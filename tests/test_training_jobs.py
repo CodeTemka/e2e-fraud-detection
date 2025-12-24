@@ -8,6 +8,7 @@ from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 
 runner = CliRunner()
 
+
 def test_create_automl_job_builds_expected_job():
     config = AutoMLJobConfig(
         experiment_name="demo-experiment",
@@ -42,11 +43,14 @@ def test_list_completed_jobs_filters_on_status_and_experiment():
 def test_submit_automl_rejects_empty_dataset(monkeypatch):
     class FakeSettings:
         dataset_name = "azureml:demo:1"
-        compute_cluster = "cpu-cluster"
+        training_compute = "cpu-cluster"
         default_metric = "norm_macro_recall"
 
         def require_azure(self):
             return self
+
+        def get_training_compute(self):
+            return self.training_compute
 
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
@@ -67,29 +71,22 @@ def test_submit_automl_rejects_empty_dataset(monkeypatch):
     assert create_called is False
 
 
-def test_submit_automl_rejects_empty_compute(monkeypatch):
+def test_create_automl_job_uses_settings_compute(monkeypatch):
     class FakeSettings:
-        dataset_name = "azureml:demo:1"
-        compute_cluster = "cpu-cluster"
-        default_metric = "norm_macro_recall"
+        training_compute = "cpu-cluster"
 
-        def require_azure(self):
-            return self
+        def get_training_compute(self):
+            return self.training_compute
 
-    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
-    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+    monkeypatch.setattr("fraud_detection.training.automl.get_settings", lambda: FakeSettings())
 
-    create_called = False
+    config = AutoMLJobConfig(
+        experiment_name="demo-experiment",
+        target_column="Class",
+        primary_metric="AUC_weighted",
+        compute=None,
+        training_data="azureml:demo:1",
+    )
 
-    def fake_create(config):
-        nonlocal create_called
-        create_called = True
-        return config
-
-    monkeypatch.setattr(cli, "create_automl_job", fake_create)
-
-    result = runner.invoke(cli.app, ["submit-automl", "--compute", ""])
-
-    assert result.exit_code != 0
-    assert "Provide --compute or set AML_COMPUTE_TRAIN/AML_COMPUTE." in result.output
-    assert create_called is False
+    job = create_automl_job(config)
+    assert job.compute == "cpu-cluster"

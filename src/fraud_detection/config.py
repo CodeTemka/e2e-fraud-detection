@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
+
 class Settings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
@@ -48,12 +49,21 @@ class Settings(BaseSettings):
     automl_train_exp: str = "automl-train"
 
     # Default compute
+    training_compute: str = Field(
+        default="cpu-cluster",
+        validation_alias=AliasChoices(
+            "TRAINING_COMPUTE",
+            "AML_COMPUTE_TRAIN",
+            "AML_COMPUTE",
+            "COMPUTE_CLUSTER",
+        ),
+    )
+    deployment_instance_type: str = Field(
+        default="Standard_DS3_v2",
+        validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
+    )
     instance_type: str = "Standard_DS3_v2"
     instance_count: int = 1
-    compute_cluster: str = Field(
-        default="",
-        validation_alias=AliasChoices("AML_COMPUTE_TRAIN", "AML_COMPUTE", "COMPUTE_CLUSTER"),
-    )
     compute_min_nodes: int = 0
     compute_max_nodes: int = 2
 
@@ -103,6 +113,25 @@ class Settings(BaseSettings):
             },
             context="Kaggle",
         )
+
+    @property
+    def compute_cluster(self) -> str:
+        """Backward-compatible alias for training_compute."""
+        return self.training_compute
+
+    def get_training_compute(self) -> str:
+        compute = (self.training_compute or "").strip()
+        if not compute:
+            raise ValueError("Training compute is not configured. Set TRAINING_COMPUTE.")
+        return compute
+
+    def get_deployment_instance_type(self) -> str:
+        instance_type = (self.deployment_instance_type or "").strip()
+        if not instance_type:
+            raise ValueError(
+                "Deployment instance type is not configured. Set DEPLOYMENT_INSTANCE_TYPE."
+            )
+        return instance_type
 
 
 @lru_cache(maxsize=1)

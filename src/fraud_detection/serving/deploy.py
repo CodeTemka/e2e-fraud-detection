@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import ManagedOnlineDeployment
 
+from fraud_detection.config import get_settings
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -24,7 +25,7 @@ def deploy_model(
     endpoint_name: str,
     deployment_name: str = "blue",
     model_name: str,
-    instance_type: str = "Standard_DS3_v2",
+    instance_type: str | None = None,
     instance_count: int = 1,
     tags: Mapping[str, str] | None = None,
 ) -> ManagedOnlineDeployment:
@@ -33,6 +34,9 @@ def deploy_model(
     if instance_count < 1:
         raise ValueError("instance_count must be >= 1")
 
+    settings = get_settings()
+    resolved_instance_type = (instance_type or "").strip() or settings.get_deployment_instance_type()
+
     model_version = _get_model_version(ml_client, model_name)
     model = ml_client.models.get(name=model_name, version=model_version)
 
@@ -40,7 +44,7 @@ def deploy_model(
         name=deployment_name,
         endpoint_name=endpoint_name,
         model=model,
-        instance_type=instance_type,
+        instance_type=resolved_instance_type,
         instance_count=instance_count,
         tags=dict(tags) if tags else {"project": "fraud-detection"},
     )
@@ -52,7 +56,7 @@ def deploy_model(
             "deployment_name": deployment_name,
             "model_name": model_name,
             "model_version": model_version,
-            "instance_type": instance_type,
+            "instance_type": resolved_instance_type,
             "instance_count": instance_count,
         },
     )

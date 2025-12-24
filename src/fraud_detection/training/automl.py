@@ -65,7 +65,7 @@ class AutoMLJobConfig:
 
     experiment_name: str
     primary_metric: ClassificationPrimaryMetrics | str
-    compute: str
+    compute: str | None
     training_data: str
 
     target_column: str = "Class"
@@ -87,19 +87,19 @@ def create_automl_job(config: AutoMLJobConfig) -> Any:
     """Create a configured AutoML classification job."""
     if not config.training_data:
         raise ValueError("config.training_data is empty. Provide an MLTable asset path/ID/URI.")
-    if not config.compute:
-        raise ValueError("config.compute is empty. Provide an Azure ML compute target name.")
     if not config.experiment_name:
         raise ValueError("config.experiment_name is empty.")
     if not config.target_column:
         raise ValueError("config.target_column is empty.")
 
+    settings = get_settings()
+    compute_target = (config.compute or "").strip() or settings.get_training_compute()
     logger.info("Preparing AutoML job", extra={"experiment": config.experiment_name})
 
     data_input = Input(type=AssetTypes.MLTABLE, path=config.training_data)
 
     job = automl.classification(
-        compute=config.compute,
+        compute=compute_target,
         experiment_name=config.experiment_name,
         training_data=data_input,
         target_column_name=config.target_column,
@@ -150,7 +150,7 @@ def automl_job_builder(
     *,
     metric: str | ClassificationPrimaryMetrics,
     training_data: str,
-    compute: str,
+    compute: str | None = None,
     allowed_algorithms: list[str] | None = None,
 ) -> AutoMLJobConfig:
     """Generic job builder based on specified metric (optionally restrict algorithms)."""
@@ -158,11 +158,12 @@ def automl_job_builder(
     settings = get_settings()
     # Use metric string for experiment/job naming (clean + stable)
     metric_slug = _slug(resolved_metric)
+    compute_target = (compute or "").strip() or settings.get_training_compute()
 
     return AutoMLJobConfig(
         experiment_name=settings.automl_train_exp,
         primary_metric=resolved_metric,
-        compute=compute,
+        compute=compute_target,
         training_data=training_data,
         cross_validations=5,
         allowed_algorithms=allowed_algorithms,
