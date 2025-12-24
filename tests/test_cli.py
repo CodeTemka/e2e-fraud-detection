@@ -82,7 +82,7 @@ def test_submit_automl_uses_defaults(monkeypatch):
 
     class FakeSettings:
         dataset_name = "azureml:dataset:1"
-        compute_cluster = "cpu-cluster"
+        training_compute = "cpu-cluster"
         default_metric = "norm_macro_recall"
         instance_type = "Standard_DS3_v2"
         compute_min_nodes = 0
@@ -90,6 +90,9 @@ def test_submit_automl_uses_defaults(monkeypatch):
 
         def require_azure(self):
             return self
+
+        def get_training_compute(self):
+            return self.training_compute
 
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
