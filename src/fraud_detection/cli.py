@@ -6,8 +6,7 @@ from typing import Annotated
 
 import pandas as pd
 import typer
-from azure.ai.ml.constants import AssetTypes
-from azure.ai.ml.entities import Data, Model
+from azure.ai.ml.entities import Model
 from azure.core.exceptions import ResourceNotFoundError
 from mlflow.entities import ViewType
 
@@ -17,11 +16,6 @@ from fraud_detection.data.data_validation import (
     DataValidationError,
     ValidationOptions,
     validate_creditcard_data,
-)
-from scripts.git_add_secret import (
-    GitHubSecretManager,
-    update_compute_secrets,
-    update_model_and_endpoint_secrets,
 )
 from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
@@ -33,11 +27,6 @@ from fraud_detection.registry.best_runs_by_metric import (
     experiment_by_prefix,
 )
 from fraud_detection.registry.register_from_run import register_model_from_run
-from fraud_detection.serving.choose_model import (
-    build_registered_models_table,
-    choose_registered_model,
-    collect_registered_models,
-)
 from fraud_detection.serving.deploy import deploy_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
