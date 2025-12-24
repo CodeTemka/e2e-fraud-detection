@@ -1,7 +1,10 @@
-"""Utilities to register the best AutoML child run as Azure ML models."""
+"""Utilities to register the best AutoML child run as Azure ML models.
+Used for registering best child runs from automl job,
+Not recommended for a model to be deployed.
+Instead use best_runs_by_metric.py to register a model to be deployed.
+"""
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 
 import mlflow
@@ -9,51 +12,16 @@ from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Model
 
-from fraud_detection.training.automl import EXPERIMENT_PREFIX
+from fraud_detection.config import get_settings
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Keep yours (legacy experiments)
-DEFAULT_EXPERIMENTS = [
-    "automated-ml-classification-recall-experiment",
-    "automated-ml-classification-experiment",
-]
+settings = get_settings()
 
 
-def experiment_by_prefix(ml_client: MLClient, *, prefix: str) -> list[mlflow.entities.Experiment]:
-    """Return MLflow experiments whose names start with the given prefix."""
-
-    mlflow_tracking_uri(ml_client)
-    exps = mlflow.search_experiments()
-    return [exp for exp in exps if exp.name.startswith(prefix)]
-
-
-def _slug(s: str) -> str:
-    """Make a stable, Azure-safe-ish name."""
-    s = (s or "").lower().strip()  # FIX: strip()
-    s = s.replace("_", "-")
-    s = re.sub(r"[^a-z0-9-]+", "-", s)
-    s = re.sub(r"-+", "-", s).strip("-")
-    return s or "model"
-
-
-def _make_model_name(*, experiment_name: str, job_name: str | None = None) -> str:
-    """Choose a model name when user doesn't provide one.
-
-    Recommended default (stable): one model name per experiment, versions increase over time.
-    Optional: include job_name if you want a unique name per job (many model names).
-    """
-    base = _slug(experiment_name)
-
-    # Stable name per experiment (recommended)
-    if not job_name:
-        return base
-
-    # If you *prefer* unique model names per job, uncomment this and return it instead:
-    # return _slug(f"{base}-{job_name}")
-
-    return base
+def _model_name(job_run: str) -> str:
+    return f"model_{job_run}"
 
 
 def mlflow_tracking_uri(ml_client: MLClient) -> None:
@@ -63,11 +31,8 @@ def mlflow_tracking_uri(ml_client: MLClient) -> None:
 
 
 def list_completed_jobs(ml_client: MLClient, experiments: Iterable[str] | str) -> dict[str, list[str]]:
-    """Return mapping: {experiment_name -> [job_name, ...]} for completed jobs.
+    """Return mapping: {experiment_name -> [job_name, ...]} for completed jobs."""
 
-    NOTE: Your older test expected {job_name -> experiment_name}.
-    If you still want that, see helper `list_completed_jobs_flat()` below.
-    """
     exp_list = [experiments] if isinstance(experiments, str) else list(experiments)
     exp_set = set(exp_list)
 
@@ -88,22 +53,6 @@ def list_completed_jobs(ml_client: MLClient, experiments: Iterable[str] | str) -
     return completed
 
 
-def list_completed_jobs_flat(ml_client: MLClient, experiments: Iterable[str]) -> dict[str, str]:
-    """Compatibility helper: {job_name -> experiment_name} (matches your old unit test)."""
-    exp_set = set(experiments)
-    out: dict[str, str] = {}
-
-    for job in ml_client.jobs.list(list_view_type="All"):
-        exp = getattr(job, "experiment_name", None)
-        status = getattr(job, "status", None)
-        name = getattr(job, "name", None)
-
-        if exp in exp_set and status == "Completed" and name:
-            out[name] = exp
-
-    return out
-
-
 def _get_best_child_run_id(parent_run_id: str) -> str | None:
     """Get best child run id from parent run tags (tries common keys)."""
     run = mlflow.get_run(parent_run_id)
@@ -114,7 +63,6 @@ def _get_best_child_run_id(parent_run_id: str) -> str | None:
         if value:
             return value
     return None
-
 
 def register_model_from_run(
     ml_client: MLClient,
@@ -132,36 +80,23 @@ def register_model_from_run(
     """
     registered_model = Model(
         path=f"azureml://jobs/{best_child_run}/outputs/artifacts/paths/{artifact_path}",
-        name=_slug(model_name),
+        name=model_name or _model_name(best_child_run),
         description=description,
-        type=AssetTypes.MLFLOW_MODEL,  # FIX: type (not types)
+        type=AssetTypes.MLFLOW_MODEL,
         tags=tags or {},
     )
 
-    # In Azure ML, same model name => new version. No need to pre-check existence.
     return ml_client.models.create_or_update(registered_model)
 
 
 def register_best_child_run(
     ml_client: MLClient,
     *,
+    experiment: str | None,
     job_name: str,
-    experiment_name: str,
-    model_name: str | None = None,
-    skip_on_missing_best_child: bool = False,
-    skip_on_model_error: bool = False,
 ) -> Model | None:
     """Register the best child run from an AutoML parent job as an MLflow model."""
-    discovered = [exp.experiment_name for exp in experiment_by_prefix(ml_client, prefix=EXPERIMENT_PREFIX)]
-    allowed_experiments = DEFAULT_EXPERIMENTS + discovered
-    if experiment_name not in allowed_experiments:
-        logger.error(
-            "Input experiment name is not available",
-            extra={"experiment_name": experiment_name, "allowed": allowed_experiments},
-        )
-        raise RuntimeError(
-            f"Experiment '{experiment_name}' is not available. Choose one of: {allowed_experiments}"
-        )
+    experiment_name = settings.automl_train_exp
 
     # Configure MLflow tracking URI
     try:
@@ -189,14 +124,10 @@ def register_best_child_run(
     if not best_child_run:
         msg = f"Best child run couldn't be found for parent job '{job_name}'"
         logger.warning(msg)
-        if skip_on_missing_best_child:
-            return None
         raise KeyError(msg)
+    
 
-    resolved_model_name = _slug(model_name) if model_name else _make_model_name(
-        experiment_name=experiment_name,
-        job_name=job_name,
-    )
+    resolved_model_name = _model_name(best_child_run)
 
     # FIX: call register_model_from_run (not register_best_child_run recursively)
     try:
@@ -212,19 +143,15 @@ def register_best_child_run(
             },
         )
     except Exception:
-        logger.exception("Failed to register model from best child run")
-        if skip_on_model_error:
-            return None
-        raise
+        msg = "Failed to register model from best child run"
+        logger.exception(msg)
+        raise RuntimeError(msg)
 
     return model
 
 
 __all__ = [
-    "DEFAULT_EXPERIMENTS",
-    "experiment_by_prefix",
     "list_completed_jobs",
-    "list_completed_jobs_flat",
     "register_best_child_run",
     "register_model_from_run",
     "mlflow_tracking_uri"

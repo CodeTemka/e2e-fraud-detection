@@ -5,12 +5,14 @@ from dataclasses import dataclass
 
 import mlflow
 from azure.ai.ml import MLClient
-from mlflow.entities import Experiment, ViewType
+from mlflow.entities import ViewType
 
-from fraud_detection.registry.automl_registry import mlflow_tracking_uri
+
 from fraud_detection.utils.logging import get_logger
+from fraud_detection.config import get_settings
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 AUTOML_RUN_LOGS = ['run_id', 'experiment_id', 'status', 'artifact_uri', 'start_time',
        'end_time', 'metrics.weighted_accuracy', 'metrics.AUC_micro',
@@ -47,8 +49,8 @@ AUTOML_DEFAULT_METRICS = ['metrics.weighted_accuracy', 'metrics.AUC_micro',
        'metrics.recall_score_weighted', 'metrics.matthews_correlation',
        'metrics.accuracy', 'metrics.balanced_accuracy',]
 
-_AUTOML_DEFAULT_METRICS_SET = set(AUTOML_DEFAULT_METRICS)
-_AUTOML_DEFAULT_METRICS_BARE = sorted(
+
+AUTOML_DEFAULT_METRICS_BARE = sorted(
     {m[len("metrics.") :] for m in AUTOML_DEFAULT_METRICS if m.startswith("metrics.")}
 )
 
@@ -67,8 +69,8 @@ def _normalize_metric_to_col(m: str) -> str:
         raise ValueError("Metric name cannot be empty.")
 
     col = m if m.startswith("metrics.") else f"metrics.{m}"
-    if col not in _AUTOML_DEFAULT_METRICS_SET:
-        allowed = ", ".join(_AUTOML_DEFAULT_METRICS_BARE)
+    if col not in AUTOML_DEFAULT_METRICS:
+        allowed = ", ".join(AUTOML_DEFAULT_METRICS_BARE)
         raise ValueError(f"Metric '{m}' is not a recognized AutoML metric. Choose one of: {allowed}")
     return col
 
@@ -93,48 +95,17 @@ def _metric_col(metric: str | Sequence[str]) -> str | list[str]:
     return out
 
 
-def experiments_by_prefix(
-    ml_client: MLClient,
-    *,
-    prefixes: Sequence[str] | str,
-) -> list[Experiment]:
-    """Return MLflow experiments whose names start with any given prefix."""
-    mlflow_tracking_uri(ml_client)
-
-    prefixes_clean = [p for p in (prefixes or []) if p]
-    if not prefixes_clean:
-        raise ValueError("prefixes must be a non-empty list")
-
-    exps = mlflow.search_experiments()
-    matched = [e for e in exps if any(e.name.startswith(p) for p in prefixes_clean)]
-    logger.info("Matched experiments", extra={"prefixes": prefixes_clean, "count": len(matched)})
-    return matched
-
-
-def experiment_by_prefix(ml_client: MLClient, *, prefix: str) -> list[Experiment]:
-    """Return MLflow experiments whose names start with the given prefix."""
-
-    return experiments_by_prefix(ml_client, prefixes=[prefix])
-
-
 def best_run_by_metric(
-    ml_client: MLClient,
     *,
-    experiment_prefixes: Sequence[str],
     metric: str | Sequence[str],
     direction: str = "max",  # "max" or "min"
-    filter_string: str = "",
     view_type: ViewType = ViewType.ACTIVE_ONLY,
 ) -> BestRun:
     """Find the best run (by a metric) across experiments whose names match prefixes."""
     if direction not in ("max", "min"):
         raise ValueError("direction must be 'max' or 'min'")
 
-    exps = experiments_by_prefix(ml_client, prefixes=experiment_prefixes)
-    if not exps:
-        raise RuntimeError(f"No experiments found for prefixes: {list(experiment_prefixes)}")
-
-    exp_ids = [e.experiment_id for e in exps]
+    experiment = settings.automl_train_exp
     col = _metric_col(metric)
 
     ascending = True if direction == "min" else False
@@ -142,8 +113,7 @@ def best_run_by_metric(
 
     # MLflow returns a DataFrame
     df = mlflow.search_runs(
-        experiment_ids=exp_ids,
-        filter_string=filter_string or "",
+        experiment_names=experiment,
         run_view_type=view_type,
     )
 
@@ -190,8 +160,7 @@ def best_run_by_metric(
 __all__ = [
     "BestRun",
     "best_run_by_metric",
-    "experiment_by_prefix",
-    "experiments_by_prefix",
     "AUTOML_RUN_LOGS",
     "AUTOML_DEFAULT_METRICS",
+    "AUTOML_DEFAULT_METRICS_BARE"
 ]

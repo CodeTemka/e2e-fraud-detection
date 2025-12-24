@@ -22,11 +22,10 @@ from fraud_detection.registry.automl_registry import (
     register_best_child_run,
 )
 from fraud_detection.registry.best_runs_by_metric import (
-    BestRun,
-    best_run_by_metric,
-    experiment_by_prefix,
+    AUTOML_DEFAULT_METRICS_BARE
 )
-from fraud_detection.registry.register_from_run import register_model_from_run
+from fraud_detection.registry.prod_model_by_metric import register_prod_model
+from fraud_detection.registry.automl_registry import register_model_from_run
 from fraud_detection.serving.deploy import deploy_model
 from fraud_detection.serving.online_endpoint import (
     create_endpoint,
@@ -34,7 +33,6 @@ from fraud_detection.serving.online_endpoint import (
     update_traffic,
 )
 from fraud_detection.training.automl import (
-    EXPERIMENT_PREFIX,
     SUPPORTED_CLASSIFICATION_METRICS,
     automl_job_builder,
     create_automl_job,
@@ -216,17 +214,10 @@ def register_best_automl_model(
         typer.Option(
             "--metric",
             "-m",
-            help=f"Please choose from {list(SUPPORTED_CLASSIFICATION_METRICS)}",
+            help=f"Please choose from {list(AUTOML_DEFAULT_METRICS_BARE)}",
             case_sensitive=False,
         ),
     ] = "norm-macro-recall",
-    model_name: Annotated[
-        str | None,
-        typer.Option(
-            "--model-name",
-            help="Optional stable model name to use instead of slugified experiment names. Useful or CD pipelines.",
-        ),
-    ] = None,
     best_child_run: Annotated[
         bool,
         typer.Option("--best-child-run", help="Register the best child run model from the AutoML parent run."),
@@ -234,52 +225,20 @@ def register_best_automl_model(
     best_by_metric: Annotated[
         bool,
         typer.Option("--best-by-metric", help="Register the best AutoML model with highest given metric."),
-    ] = False,
+    ] = True,
 ):
     """Register the best AutoML child run model or the best AutoML model by metric."""
     ml_client = ML_CLIENT
     experiment = settings.automl_train_exp
     if best_by_metric:
         try:
-            best_run: BestRun = best_run_by_metric(
-                ml_client=ml_client,
-                experiment_prefixes=[experiment or EXPERIMENT_PREFIX],
-                metric=metric,
-                view_type=ViewType.ALL,
-            )
-            typer.echo(
-                f"Found best model by metric: {best_run.metric_name}={best_run.metric_value} "
-                f"from run {best_run.run_id} in experiment {best_run.experiment_name}."
-            )
-        except Exception as e:
-            raise typer.Exit(code=1) from e
-
-        try:
-            register_model_from_run(
-                ml_client=ml_client,
-                model_name=model_name or f"{best_run.experiment_name}-best-child-model",
-                run_id=best_run.run_id,
-                description=f"Best child run model by {best_run.metric_name}={best_run.metric_value}",
-            )
-            typer.echo(
-                f"Registered best child run model: {best_run.metric_name}={best_run.metric_value} "
-                f"from run {best_run.run_id} in experiment {best_run.experiment_name}."
-            )
-        except Exception as e:
-            raise typer.Exit(code=1) from e
-
-    elif best_child_run:
-        prefix = experiment if experiment else EXPERIMENT_PREFIX
-        exps = experiment_by_prefix(ml_client, prefix=prefix)
-        exp_names = [e.experiment_name for e in exps]
-
-        if not exp_names:
-            typer.echo("No AutoML experiments found for the given prefix.")
+            register_prod_model(metric = metric)
+        except Exception:
+            typer.echo("Couldn't register the model")
             raise typer.Exit(code=0)
 
-        experiments = experiment or exp_names
-
-        completed = list_completed_jobs(ml_client=ml_client, experiments=experiments)
+    elif best_child_run:
+        completed = list_completed_jobs(ml_client=ml_client, experiments=experiment)
         if not completed:
             typer.echo("No completed AutoML jobs found for the given experiment prefix.")
             raise typer.Exit(code=0)
@@ -289,8 +248,6 @@ def register_best_automl_model(
                 model = register_best_child_run(
                     ml_client=ml_client,
                     job_name=job_name,
-                    experiment_name=exp_name,
-                    model_name=model_name,
                 )
                 if isinstance(model, Model):
                     typer.echo(f"Registered model '{model.name}' version '{model.version}' from job '{job_name}'.")
@@ -298,7 +255,7 @@ def register_best_automl_model(
                     typer.echo(f"Skipped registration for job '{job_name}'.")
 
 
-# This should be used when ensuring endpoint
+
 @app.command()
 def endpoint_create():
     """Create a managed online endpoint."""
@@ -314,7 +271,6 @@ def endpoint_create():
 
 
 
-# It is more like a local not for CD pipeline.
 @app.command()
 def endpoint_delete():
     """Delete a managed online endpoint."""
@@ -388,5 +344,5 @@ def run():
     app()
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     run()

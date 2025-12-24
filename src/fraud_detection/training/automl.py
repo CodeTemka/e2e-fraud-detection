@@ -13,11 +13,10 @@ from azure.ai.ml.automl import ClassificationPrimaryMetrics
 from azure.ai.ml.constants import AssetTypes
 
 from fraud_detection.utils.logging import get_logger
+from fraud_detection.config import get_settings
 
 logger = get_logger(__name__)
 
-# Stable experiment prefix (NOT tied to a specific algorithm)
-EXPERIMENT_PREFIX = "automl-fraud-"
 
 # Supported metrics for Azure AutoML classification jobs (your strict list)
 SUPPORTED_CLASSIFICATION_METRICS: set[str] = {
@@ -26,11 +25,6 @@ SUPPORTED_CLASSIFICATION_METRICS: set[str] = {
     "average_precision_score_weighted",
     "norm_macro_recall",
     "precision_score_weighted",
-}
-
-# User-friendly aliases accepted by the CLI; mapped to Azure-native metrics
-METRIC_ALIASES: dict[str, str] = {
-    "recall": "norm_macro_recall",
 }
 
 
@@ -143,12 +137,11 @@ def submit_job(ml_client: MLClient, job: Any) -> str:
 def _metric_check(metric: str | ClassificationPrimaryMetrics) -> str:
     """Validate metric strictly against supported list; return the metric string."""
 
-    metric_raw = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
-    metric_str = METRIC_ALIASES.get(metric_raw, metric_raw)
+    metric_str = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
 
     if metric_str not in SUPPORTED_CLASSIFICATION_METRICS:
-        allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS | set(METRIC_ALIASES)))
-        raise ValueError(f"Unsupported metric '{metric_raw}'. Choose one of: {allowed}")
+        allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS))
+        raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
 
     return metric_str
 
@@ -162,12 +155,12 @@ def automl_job_builder(
 ) -> AutoMLJobConfig:
     """Generic job builder based on specified metric (optionally restrict algorithms)."""
     resolved_metric = _metric_check(metric)
-
+    settings = get_settings()
     # Use metric string for experiment/job naming (clean + stable)
     metric_slug = _slug(resolved_metric)
 
     return AutoMLJobConfig(
-        experiment_name=f"{EXPERIMENT_PREFIX}{metric_slug}",
+        experiment_name=settings.automl_train_exp,
         primary_metric=resolved_metric,
         compute=compute,
         training_data=training_data,
@@ -189,7 +182,5 @@ __all__ = [
     "create_automl_job",
     "submit_job",
     "automl_job_builder",
-    "EXPERIMENT_PREFIX",
     "SUPPORTED_CLASSIFICATION_METRICS",
-    "METRIC_ALIASES",
 ]
