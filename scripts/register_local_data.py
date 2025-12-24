@@ -1,40 +1,40 @@
-"""Register the local data to Azure dataset if not already registered."""
 from __future__ import annotations
 
 from azure.ai.ml.constants import AssetTypes
+from azure.ai.ml.entities import Data
+from azure.core.exceptions import ResourceNotFoundError
 
-from fraud_detection.config import get_settings
 from fraud_detection.azure.client import get_ml_client
+from fraud_detection.config import get_settings
 from fraud_detection.utils.logging import get_logger
-
 
 logger = get_logger(__name__)
 
-settings = get_settings().require_azure()
-ml_client = get_ml_client(settings=settings)
+def register_local_data() -> None:
+    settings = get_settings().require_azure()
+    ml_client = get_ml_client(settings=settings)
 
-def register_local_data(ml_client) -> None:
-    """Register the local data to Azure dataset if not already registered."""
     dataset_name = settings.dataset_name
     local_data_path = settings.local_data_path
+    version = "1"
 
-    # Check if dataset already exists
     try:
-        ml_client.data.get(name=dataset_name)
-        logger.info(f"Dataset '{dataset_name}' already registered.")
+        ml_client.data.get(name=dataset_name, version=version)
+        logger.info("Dataset '%s' version '%s' already registered.", dataset_name, version)
         return
-    except Exception:
-        pass
+    except ResourceNotFoundError:
+        pass  # doesn't exist yet → create
 
-    # Register the local data as a new dataset
-    ml_client.data.create_or_update(
+    data_asset = Data(
         name=dataset_name,
+        version=version,
         path=str(local_data_path),
         type=AssetTypes.URI_FILE,
-        version="1",
+        description="Local dataset uploaded from repo.",
     )
-    logger.info(f"Registered dataset '{dataset_name}' from '{local_data_path}'.")
 
+    ml_client.data.create_or_update(data_asset)
+    logger.info("Registered dataset '%s' version '%s' from '%s'.", dataset_name, version, local_data_path)
 
 if __name__ == "__main__":
-    register_local_data(ml_client)
+    register_local_data()
