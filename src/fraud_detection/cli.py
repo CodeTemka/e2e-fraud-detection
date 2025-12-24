@@ -18,7 +18,7 @@ from fraud_detection.data.data_validation import (
     ValidationOptions,
     validate_creditcard_data,
 )
-from fraud_detection.git_var.git_add_secret import (
+from scripts.git_add_secret import (
     GitHubSecretManager,
     update_compute_secrets,
     update_model_and_endpoint_secrets,
@@ -60,6 +60,8 @@ from fraud_detection.utils.logging import get_logger
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 logger = get_logger(__name__)
 
+settings = get_settings().require_azure()
+ML_CLIENT = get_ml_client(settings=settings)
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -102,38 +104,7 @@ def _compute_exists(ml_client, name: str) -> bool:
         return False
 
 
-def _safe_update_compute_secret(
-    *,
-    settings,
-    training_compute: str | None = None,
-    deployment_compute: str | None = None,
-) -> None:
-    """Best-effort update of GitHub secrets for new compute resources."""
-    if not (settings.github_token and settings.github_owner and settings.github_repo):
-        logger.info(
-            "Skipping GitHub secret update; GitHub settings not configured",
-            extra={"training_compute": training_compute, "deployment_compute": deployment_compute},
-        )
-        return
-
-    try:
-        manager = GitHubSecretManager.from_settings(settings)
-        update_compute_secrets(
-            manager=manager,
-            training_compute=training_compute,
-            deployment_compute=deployment_compute,
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Failed to update GitHub secrets for compute",
-            extra={
-                "error": str(exc),
-                "training_compute": training_compute,
-                "deployment_compute": deployment_compute,
-            },
-        )
-
-
+# I guess, cli.py doesn't need this function.
 def _validate_local_dataset(
     *,
     path: str,
@@ -151,68 +122,10 @@ def _validate_local_dataset(
     validate_creditcard_data(df, options)
 
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_DATA_PATH = ROOT_DIR / "data" / "creditcard.csv"
-DEFAULT_DATA_NAME = "creditcard-data"
-DEFAULT_DATA_VERSION = "1"
-DEFAULT_DATA_DESCRIPTION = "Credit card fraud detection dataset (from Kaggle)"
-
-
-@app.command()
-def register_local_data(
-    path: Annotated[
-        Path,
-        typer.Option(
-            "--path",
-            "-p",
-            exists=True,
-            dir_okay=False,
-            readable=True,
-            help="Path to the local CSV file containing the dataset.",
-        ),
-    ] = DEFAULT_DATA_PATH,
-    name: Annotated[
-        str,
-        typer.Option("--name", "-n", help="Name of the registered dataset in Azure ML."),
-    ] = DEFAULT_DATA_NAME,
-    version: Annotated[
-        str,
-        typer.Option("--version", "-v", help="Version of the registered dataset."),
-    ] = DEFAULT_DATA_VERSION,
-    description: Annotated[
-        str,
-        typer.Option("--description", "-d", help="Description of the registered dataset."),
-    ] = DEFAULT_DATA_DESCRIPTION,
-):
-    """Register a local fraud dataset (CSV file) to Azure ML data asset."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
-
-    data_asset = Data(
-        name=name,
-        path=str(path.resolve()),
-        version=version,
-        description=description,
-        type=AssetTypes.URI_FILE,
-    )
-
-    try:
-        ml_client.data.get(name=name, version=version)
-        typer.echo(f"Data asset '{name}' version '{version}' already exists in Azure ML.")
-        return
-    except ResourceNotFoundError:
-        pass
-
-    ml_client.data.create_or_update(data_asset)
-    typer.echo(f"Registered data asset '{name}' version '{version}' to Azure ML.")
-
-
+#This function should be more like validate data for training jobs.
 @app.command()
 def validate_data(
-    path: Annotated[
-        str,
-        typer.Option("--path", "-p", help="local CSV file or local MLTable folder path"),
-    ] = "data/creditcard.csv",
+    path = settings.local_data_path,
     sample_rows: Annotated[
         int | None,
         typer.Option(
@@ -220,7 +133,7 @@ def validate_data(
             help="Only load the first N rows for a quick validatoin pass (recommended for speed)",
             min=1,
         ),
-    ] = None,
+    ] = 1000,
     skip_balance_check: Annotated[
         bool,
         typer.Option("--balance-check", help="Checking the class balance in the dataset"),
@@ -255,6 +168,8 @@ def validate_data(
     typer.echo("Data validation passed successfully.")
 
 
+
+# This function is used for only locally not for CD pipeline.
 @app.command()
 def submit_automl(
     metric: Annotated[
@@ -320,9 +235,6 @@ def submit_automl(
         max_instances=max_nodes,
     )
 
-    if not compute_preexists:
-        _safe_update_compute_secret(settings=settings, training_compute=compute_target)
-
     allowed_algorithms = _normalize_algorithms(algorithms)
 
     automl_job_config = automl_job_builder(
@@ -335,6 +247,7 @@ def submit_automl(
     job = create_automl_job(config=automl_job_config)
     job_name = submit_job(ml_client=ml_client, job=job)
     typer.echo(f"Submitted AutoML job: {job_name}")
+
 
 
 @app.command()
@@ -435,173 +348,50 @@ def register_best_automl_model(
                     typer.echo(f"Skipped registration for job '{job_name}'.")
 
 
+# This should be used when ensuring endpoint
 @app.command()
-def endpoint_create(
-    name: Annotated[
-        str,
-        typer.Option("--name", "-n", help="Name of the online endpoint to create."),
-    ] = ...,
-    description: Annotated[
-        str | None,
-        typer.Option("--description", "-d", help="Description of the online endpoint."),
-    ] = None,
-):
+def endpoint_create():
     """Create a managed online endpoint."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
-
+    name = settings.endpoint_name
     ep = create_endpoint(
         ml_client,
         name=name,
-        description=description,
         tags={"project": "fraud-detection"},
     )
     typer.echo(f"Created online endpoint '{ep.name}'")
 
 
+
+# It is more like a local not for CD pipeline.
 @app.command()
-def endpoint_delete(
-    name: Annotated[
-        str,
-        typer.Option("--name", "-n", help="Name of the online endpoint to delete."),
-    ] = ...,
-):
+def endpoint_delete():
     """Delete a managed online endpoint."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
-
+    name = settings.endpoint_name
     delete_endpoint(ml_client, name=name)
     typer.echo(f"Deleted online endpoint '{name}'")
 
 
-@app.command()
-def endpoint_traffic(
-    endpoint: Annotated[
-        str,
-        typer.Option("--endpoint", "-e", help="Name of the online endpoint to update."),
-    ] = ...,
-    traffic: Annotated[
-        list[str],
-        typer.Option("--traffic", "-t", help="Traffic mapping like blue=100 green=0 (repeatable)"),
-    ] = ...,
-):
-    """Update endpoint traffic split. Traffic must sum to 100%."""
-    settings = get_settings().require_azure()
-    ml_client = get_ml_client(settings=settings)
-
-    mapping: dict[str, int] = {}
-    for item in traffic:
-        if "=" not in item:
-            raise typer.BadParameter(f"Invalid traffic item '{item}'. Use deployment=percent.")
-        dep, pct = item.split("=", 1)
-        dep = dep.strip()
-        try:
-            mapping[dep] = int(pct)
-        except ValueError as e:
-            raise typer.BadParameter(f"Invalid percent '{pct}' for deployment '{dep}'.") from e
-
-    update_traffic(ml_client, endpoint_name=endpoint, traffic=mapping)
-    typer.echo(f"Updated traffic for endpoint '{endpoint}': {mapping}")
 
 
 @app.command()
-def choose_one_registered_model(
-    endpoint_name: Annotated[
-        str,
-        typer.Option(
-            "--endpoint-name",
-            "-e",
-            help="Managed online endpoint to target in the CD pipeline.",
-        ),
-    ] = "fraud-detection-prod",
-    name_prefix: Annotated[
-        str | None,
-        typer.Option("--name-prefix", help="Optional prefix to filter registered models."),
-    ] = None,
-):
-    """Pick a registered Azure ML model and store its name for deployment."""
-    settings = get_settings().require_azure().require_github()
-
-    ml_client = get_ml_client(settings=settings)
-    models = collect_registered_models(ml_client, name_prefix=name_prefix)
-
-    if not models:
-        typer.echo("No registered models found in the workspace.")
-        raise typer.Exit(code=1)
-
-    typer.echo("Available registered models:")
-    for line in build_registered_models_table(models):
-        typer.echo(line)
-
-    selection = typer.prompt("Enter the number of the model to promote for deployment", type=int)
-
-    try:
-        chosen = choose_registered_model(models, selection)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-
-    secrets_manager = GitHubSecretManager.from_settings(settings)
-    update_model_and_endpoint_secrets(
-        manager=secrets_manager,
-        model_name=chosen.name,
-        endpoint_name=endpoint_name,
-    )
-
-    typer.echo(
-        f"Selected model '{chosen.name}' (version {chosen.version}) for endpoint '{endpoint_name}'. GitHub secrets updated."
-    )
-
-
-@app.command()
-def deploy(
-    model_name: Annotated[
-        str | None,
-        typer.Option("--model-name", "-m", help="Name of the registered model to deploy."),
-    ] = None,
-    endpoint_name: Annotated[
-        str | None,
-        typer.Option("--endpoint-name", "-e", help="Name of the online endpoint to deploy to."),
-    ] = None,
-    deployment_name: Annotated[
-        str,
-        typer.Option("--deployment-name", "-d", help="Deployment slot name."),
-    ] = "blue",
-    compute: Annotated[
-        str | None,
-        typer.Option("--compute", "-c", help="Compute cluster name to ensure for deployment."),
-    ] = None,
-    instance_type: Annotated[
-        str,
-        typer.Option("--instance-type", "-it", help="Azure ML compute instance type."),
-    ] = "Standard_DS3_v2",
-    instance_count: Annotated[
-        int,
-        typer.Option("--instance-count", "-ic", help="Number of instances to deploy."),
-    ] = 1,
-    compute_min_nodes: Annotated[
-        int,
-        typer.Option("--compute-min-nodes", help="Minimum nodes for the deployment compute cluster."),
-    ] = 0,
-    compute_max_nodes: Annotated[
-        int,
-        typer.Option("--compute-max-nodes", help="Maximum nodes for the deployment compute cluster."),
-    ] = 1,
-    tags: Annotated[
-        list[str] | None,
-        typer.Option("--tag", "-t", help="Tags to apply to the deployment (repeatable key=value)."),
-    ] = None,
-):
+def deploy():
     """Deploy a registered model to a managed online endpoint."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
+    compute_target = settings.compute_cluster
+    instance_type = settings.instance_type
+    instance_count = settings.instance_count
+    compute_min_nodes = settings.compute_min_nodes
+    compute_max_nodes = settings.compute_max_nodes
+    endpoint_name = settings.endpoint_name
+    deployment_name = settings.deployment_name
+    model_name = settings.prod_model_name
 
-    compute_target = compute or settings.deployment_compute
-    if not compute_target:
-        raise typer.BadParameter(
-            "Provide --compute or set AML_COMPUTE_DEPLOY/AML_COMPUTE for deployment compute creation."
-        )
 
-    compute_preexists = _compute_exists(ml_client, compute_target)
     ensure_deployment_compute(
         ml_client,
         name=compute_target,
@@ -610,16 +400,6 @@ def deploy(
         max_instances=compute_max_nodes,
     )
 
-    if not compute_preexists:
-        _safe_update_compute_secret(settings=settings, deployment_compute=compute_target)
-
-    tag_mapping: dict[str, str] = {}
-    for tag in tags or []:
-        if "=" not in tag:
-            raise typer.BadParameter(f"Invalid tag '{tag}'. Use key=value format.")
-        key, value = tag.split("=", 1)
-        tag_mapping[key.strip()] = value.strip()
-
     deployment = deploy_model(
         ml_client,
         endpoint_name=endpoint_name,
@@ -627,40 +407,19 @@ def deploy(
         model_name=model_name,
         instance_type=instance_type,
         instance_count=instance_count,
-        tags=tag_mapping or {"project": "fraud-detection"},
     )
     typer.echo(f"Deployed model '{model_name}' to endpoint '{endpoint_name}' as deployment '{deployment.name}'.")
 
 
-DEFAULT_REQUEST_FILE = ROOT_DIR / "sample_request.json"
-
-
 @app.command()
-def serve_invoke(
-    endpoint_name: Annotated[
-        str,
-        typer.Option("--endpoint-name", "-e", help="Endpoint to call"),
-    ] = ...,
-    deployment_name: Annotated[
-        str,
-        typer.Option("--deployment-name", "-d", help="Deployment slot name"),
-    ] = "blue",
-    request_file: Annotated[
-        Path,
-        typer.Option(
-            "--request-file",
-            "-r",
-            exists=True,
-            dir_okay=False,
-            readable=True,
-            help="Path to JSON request payload",
-        ),
-    ] = DEFAULT_REQUEST_FILE,
-) -> None:
+def serve_invoke():
     """Invoke a managed online endpoint deployment (smoke test)."""
     settings = get_settings().require_azure()
     ml_client = get_ml_client(settings=settings)
-
+    endpoint_name = settings.endpoint_name
+    deployment_name = settings.deployment_name
+    request_file = settings.smoke_test
+    
     try:
         ml_client.online_endpoints.get(endpoint_name)
     except ResourceNotFoundError as exc:

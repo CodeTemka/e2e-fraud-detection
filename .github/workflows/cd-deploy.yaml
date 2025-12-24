@@ -1,20 +1,17 @@
 name: CD - Deploy to Azure ML
 
 on:
-  # Manual trigger
   workflow_dispatch:
   workflow_run:
-    workflows: ["CI"]        # must match the name: CI
+    workflows: ["CI"]
     types:
       - completed
-
 jobs:
   deploy:
     name: Deploy after successful CI
     runs-on: ubuntu-latest
 
     permissions:
-      id-token: write   # Required for OIDC authentication
       contents: read
 
     # Only run if:
@@ -28,29 +25,8 @@ jobs:
       ) || github.event_name == 'workflow_dispatch'
 
     env:
-      # Azure authentication (service principal)
-      # Secrets in the repository are stored without the AZURE_ prefix
-      AZURE_TENANT_ID: ${{ secrets.TENANTID }}
-      AZURE_CLIENT_ID: ${{ secrets.CLIENTID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
       PYTHONUNBUFFERED: "1"
-
-      # Azure ML workspace + project settings (consumed by pydantic Settings)
-      SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTIONID }}
-      RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
-      WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
-      LOCATION: ${{ secrets.LOCATION }}
-      AML_COMPUTE_TRAIN: ${{ secrets.AML_COMPUTE_TRAIN }}
-      AML_COMPUTE_DEPLOY: ${{ secrets.AML_COMPUTE_DEPLOY }}
-      AML_COMPUTE: ${{ secrets.AML_COMPUTE_TRAIN || secrets.AML_COMPUTE }}
-      AML_DATASET: ${{ secrets.AML_DATASET }}
-      INSTANCE_TYPE: ${{ secrets.INSTANCE_TYPE }}
-      INSTANCE_COUNT: ${{ secrets.INSTANCE_COUNT }}
-
-      # Endpoint / deployment config
-      ENDPOINT_NAME: fraud-detection-prod
-      DEPLOYMENT_NAME: blue
-      MODEL_NAME: fraud-detection-prod
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
 
     steps:
       - name: Checkout repository at CI commit
@@ -72,15 +48,9 @@ jobs:
         run: |
           python -m pip install -e ".[dev]"
 
-      - name: Build package wheel for deployment
-        run: python -m build
-
       - name: Validate required deployment secrets
         run: |
-          required_vars=(
-            AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_SUBSCRIPTION_ID
-            RESOURCE_GROUP WORKSPACE_NAME LOCATION AML_DATASET
-          )
+          required_vars=(AZURE_CREDENTIALS)
 
           missing=()
           for var in "${required_vars[@]}"; do
@@ -107,54 +77,24 @@ jobs:
       - name: Log in to Azure with a Service Principal Secret
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          creds: "$AZURE_CREDENTIALS"
 
       - name: Install Azure ML CLI extension and configure defaults
         run: |
           az extension add -n ml -y
-          az configure --defaults \
-            group=$RESOURCE_GROUP \
-            workspace=$WORKSPACE_NAME
 
-      - name: Register local fraud dataset (idempotent)
+      - name: Validate data
         run: |
-          fraud-cli register-local-data \
-            --path "data/creditcard.csv" \
-            --name "$AML_DATASET" \
-            --version "1" \
-            --description "Credit card fraud detection dataset (from Kaggle)"
-
-      - name: Promote latest AutoML job to stable model name
-        run: |
-          fraud-cli register-best-automl-model \
-            --best-by-metric \
-            --metric recall \
-            --model-name "$MODEL_NAME"
+          fraud-cli validate-data
 
       - name: Ensure online endpoint exists
         run: |
-          fraud-cli endpoint-create \
-            --name "$ENDPOINT_NAME" \
-            --description "Fraud detection production endpoint"
+          fraud-cli endpoint-create
 
       - name: Deploy latest model version to endpoint
         run: |
-          fraud-cli deploy \
-            --model-name "$MODEL_NAME" \
-            --endpoint-name "$ENDPOINT_NAME" \
-            --deployment-name "$DEPLOYMENT_NAME" \
-            --instance-type "${INSTANCE_TYPE:-Standard_DS3_v2}" \
-            --instance-count "${INSTANCE_COUNT:-1}"
+          fraud-cli deploy
 
       - name: Smoke test deployed endpoint
         run: |
-          fraud-cli serve-invoke \
-            --endpoint-name "$ENDPOINT_NAME" \
-            --deployment-name "$DEPLOYMENT_NAME" \
-            --request-file sample_request.json
-
-      - name: Delete endpoint after one hour to control costs
-        run: |
-          echo "Sleeping for one hour before deleting endpoint $ENDPOINT_NAME"
-          sleep 3600
-          fraud-cli endpoint-delete --name "$ENDPOINT_NAME"
+          fraud-cli serve-invoke 

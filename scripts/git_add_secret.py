@@ -1,15 +1,4 @@
-"""Helpers for creating or updating GitHub Actions secrets.
-
-The CD pipeline relies on two secrets that can change frequently:
-
-``MODEL_NAME``
-    Stable Azure ML model name promoted for deployment.
-``ENDPOINT_NAME``
-    Target managed online endpoint name used during rollout.
-
-This module exposes a lightweight helper that encrypts and uploads those
-values (or any other secrets) using the GitHub REST API.
-"""
+"""Helpers for creating or updating GitHub Actions secrets."""
 from __future__ import annotations
 
 import base64
@@ -107,42 +96,30 @@ class GitHubSecretManager:
         action = "updated" if existed else "created"
         logger.info("Secret '%s' %s successfully.", name, action)
 
+with open("sp_credentials.json", "r") as f:
+    sp_credentials = json.load(f)
 
-def update_model_and_endpoint_secrets(
-    *,
-    manager: GitHubSecretManager,
-    model_name: str,
-    endpoint_name: str,
-) -> None:
-    """Update GitHub secrets required by the CD deployment workflow."""
-
-    manager.set_secret("MODEL_NAME", model_name)
-    manager.set_secret("ENDPOINT_NAME", endpoint_name)
-
-
-def update_compute_secrets(
-    *,
-    manager: GitHubSecretManager,
-    training_compute: str | None = None,
-    deployment_compute: str | None = None,
-    update_legacy_aml_compute: bool = True,
-) -> None:
+def update_azure_credentials(manager: GitHubSecretManager,) -> None:
     """Update compute-related GitHub secrets for CI/CD workflows."""
 
-    if training_compute:
-        manager.set_secret("AML_COMPUTE_TRAIN", training_compute)
-        if update_legacy_aml_compute:
-            manager.set_secret("AML_COMPUTE", training_compute)
+    client_id = sp_credentials.get("clientId")
+    tenant_id = sp_credentials.get("tenantId")
+    client_secret = sp_credentials.get("clientSecret")
+    subscription_id = sp_credentials.get("subscriptionId")
 
-    if deployment_compute:
-        manager.set_secret("AML_COMPUTE_DEPLOY", deployment_compute)
-        if update_legacy_aml_compute and not training_compute:
-            manager.set_secret("AML_COMPUTE", deployment_compute)
+    if not all([client_id, tenant_id, client_secret, subscription_id]):
+        raise ValueError("Missing required service principal credentials in sp_credentials.json")
+    
+    azure_credentials = {
+        "clientSecret": client_secret,
+        "subscriptionId": subscription_id,
+        "tenantId": tenant_id,
+        "clientId": client_id
+    }
+
+    manager.set_secret("AZURE_CREDENTIALS", azure_credentials)
 
 
-__all__ = [
-    "GitHubSecretManager",
-    "update_model_and_endpoint_secrets",
-    "update_compute_secrets",
-    "require_setting",
-]
+if __name__ == "__main__":
+    secret_manager = GitHubSecretManager.from_settings()
+    update_azure_credentials(secret_manager)

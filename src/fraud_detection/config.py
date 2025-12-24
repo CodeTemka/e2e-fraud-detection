@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     """ Application wide settings loaded from environment variables. """
 
     model_config = SettingsConfigDict(
-        env_file=[ROOT_DIR / ".env", ROOT_DIR / ".env.generated"],
+        env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",  # ignore unknown env vars instead of erroring
@@ -24,10 +24,6 @@ class Settings(BaseSettings):
     resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
     workspace_name: str | None = Field(None, alias="WORKSPACE_NAME")
     location: str | None = Field(None, alias="LOCATION")
-    aml_compute_train: str | None = Field(None, alias="AML_COMPUTE_TRAIN")
-    aml_compute_deploy: str | None = Field(None, alias="AML_COMPUTE_DEPLOY")
-    aml_compute: str | None = Field(None, alias="AML_COMPUTE")
-    aml_dataset: str | None = Field(None, alias="AML_DATASET")
 
     # Github
     github_token: str | None = Field(None, alias="GITHUB_TOKEN")
@@ -37,6 +33,35 @@ class Settings(BaseSettings):
     # Kaggle
     kaggle_username: str | None = Field(None, alias="KAGGLE_USERNAME")
     kaggle_key: str | None = Field(None, alias="KAGGLE_KEY")
+
+    # Default dataset
+    dataset_name: str = "credit-card-data"
+    local_data_path: Path = ROOT_DIR / "data" / "creditcard.csv"
+
+    # Default model
+    default_metric: str = "norm-macro-recall"
+    prod_model_name: str = "production-model"
+
+    # Default experiments
+    custom_train_exp = 'custom-train'
+    automl_train_exp = 'automl-train'
+
+    # Default compute
+    instance_type = "Standard_DS3_v2"
+    instance_count = 1
+    compute_cluster = ''
+    compute_min_nodes = 0
+    compute_max_nodes = 2
+
+    # Default endpoint
+    endpoint_name = "fraud-detection"
+
+    # Default deployment
+    deployment_name = 'blue'
+
+    # Default smoke test json
+    smoke_test = ROOT_DIR / "sample_request.json"
+
 
     def _require(self, required: dict[str, str], *, context: str) -> Settings:
         """ Internal helper to enforce required settings. """
@@ -48,6 +73,7 @@ class Settings(BaseSettings):
                 f"Missing required environment variables for {context}: {', '.join(missing)}"
             )
         return self
+    
     
     def require_azure(self) -> Settings:
         """ Ensure Azure-specific settings are provided. """
@@ -61,6 +87,7 @@ class Settings(BaseSettings):
             context="Azure",
         )
     
+
     def require_github(self) -> Settings:
         """ Ensure Github-specific settings are provided. """
         return self._require(
@@ -72,6 +99,7 @@ class Settings(BaseSettings):
             context="Github",
         )
     
+    
     def require_kaggle(self) -> Settings:
         """ Ensure Kaggle-specific settings are provided. """
         return self._require(
@@ -82,27 +110,7 @@ class Settings(BaseSettings):
             context="Kaggle",
         )
     
-    def require_training(self) -> Settings:
-        """ Ensure all settings required for training are provided. """
-        required: dict[str, str] = {"aml_dataset": "AML_DATASET"}
-
-        if not (self.aml_compute_train or self.aml_compute):
-            required["aml_compute_train"] = "AML_COMPUTE_TRAIN or AML_COMPUTE"
-
-        return self._require(required, context="Training")
-
-    @property
-    def training_compute(self) -> str | None:
-        """Return preferred training compute (new env var first, fallback to legacy)."""
-
-        return self.aml_compute_train or self.aml_compute
-
-    @property
-    def deployment_compute(self) -> str | None:
-        """Return preferred deployment compute (new env var first, fallback to training/legacy)."""
-
-        return self.aml_compute_deploy or self.aml_compute_train or self.aml_compute
-
+    
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """ Get the application settings with caching. """

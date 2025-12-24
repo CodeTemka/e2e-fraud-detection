@@ -1,4 +1,5 @@
 """Utilities for validating credit card fraud datasets."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
