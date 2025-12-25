@@ -9,6 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
+DEFAULT_SUBSCRIPTION_ID = "aa4acb09-3611-4169-8504-1e68ad04a40f"
+DEFAULT_RESOURCE_GROUP = "e2e-fraud-detection"
+DEFAULT_WORKSPACE_NAME = "e2e-fraud-detection-ws"
+DEFAULT_LOCATION = "eastasia"
+
 
 class Settings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
@@ -18,11 +23,23 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Azure
-    subscription_id: str | None = Field(None, alias="SUBSCRIPTION_ID")
-    resource_group: str | None = Field(None, alias="RESOURCE_GROUP")
-    workspace_name: str | None = Field(None, alias="WORKSPACE_NAME")
-    location: str | None = Field(None, alias="LOCATION")
+    # Azure (defaults in code; can be overridden by env vars in CI)
+    subscription_id: str = Field(
+        default=DEFAULT_SUBSCRIPTION_ID,
+        validation_alias=AliasChoices("SUBSCRIPTION_ID", "AZURE_SUBSCRIPTION_ID"),
+    )
+    resource_group: str = Field(
+        default=DEFAULT_RESOURCE_GROUP,
+        validation_alias=AliasChoices("RESOURCE_GROUP", "AZURE_RESOURCE_GROUP"),
+    )
+    workspace_name: str = Field(
+        default=DEFAULT_WORKSPACE_NAME,
+        validation_alias=AliasChoices("WORKSPACE_NAME", "AZURE_WORKSPACE_NAME"),
+    )
+    location: str = Field(
+        default=DEFAULT_LOCATION,
+        validation_alias=AliasChoices("LOCATION", "AZURE_LOCATION"),
+    )
 
     # Github
     github_token: str | None = Field(None, alias="GITHUB_TOKEN")
@@ -39,11 +56,17 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AML_DATASET", "DATASET_NAME"),
     )
     local_data_path: Path = ROOT_DIR / "data" / "creditcard.csv"
-    registered_data_path: str = "azureml:creditcard:1"
+
+    # IMPORTANT:
+    # - AutoML expects MLTable input
+    # - So this should point to an MLTable data asset version (e.g. :2), not a uri_file (:1).
+    registered_data_path: str = "azureml:creditcard:2"
+
     data_path_mltable: Path = ROOT_DIR / "data"
 
     # Default model
-    default_metric: str = "norm-macro-recall"
+    # IMPORTANT: your AutoML metric list uses underscores (norm_macro_recall)
+    default_metric: str = "norm_macro_recall"
     prod_model_name: str = "production-model"
 
     # Default experiments
@@ -78,7 +101,7 @@ class Settings(BaseSettings):
     # Default smoke test json
     smoke_test: Path = ROOT_DIR / "sample_request.json"
 
-    def _require(self, required: dict[str, str], *, context: str) -> Settings:
+    def _require(self, required: dict[str, str], *, context: str) -> "Settings":
         missing = [env for attr, env in required.items() if not getattr(self, attr)]
         if missing:
             raise ValueError(
@@ -86,7 +109,8 @@ class Settings(BaseSettings):
             )
         return self
 
-    def require_azure(self) -> Settings:
+    def require_azure(self) -> "Settings":
+        # With defaults set above, this will pass in CI even without .env
         return self._require(
             {
                 "subscription_id": "SUBSCRIPTION_ID",
@@ -97,7 +121,7 @@ class Settings(BaseSettings):
             context="Azure",
         )
 
-    def require_github(self) -> Settings:
+    def require_github(self) -> "Settings":
         return self._require(
             {
                 "github_token": "GITHUB_TOKEN",
@@ -107,7 +131,7 @@ class Settings(BaseSettings):
             context="Github",
         )
 
-    def require_kaggle(self) -> Settings:
+    def require_kaggle(self) -> "Settings":
         return self._require(
             {
                 "kaggle_username": "KAGGLE_USERNAME",
