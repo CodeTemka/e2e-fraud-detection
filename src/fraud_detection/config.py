@@ -83,10 +83,10 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DEPLOYMENT_COMPUTE", "AML_COMPUTE_DEPLOY"),
     )
     deployment_instance_type: str = Field(
-        default="Standard_F4s_v2",
+        default="Standard_DS3_v2",
         validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
     )
-    instance_type: str = "Standard_DS3_v2"
+    instance_type: str = "Standard_D4s_v3"
     instance_count: int = 1
     compute_min_nodes: int = 0
     compute_max_nodes: int = 2

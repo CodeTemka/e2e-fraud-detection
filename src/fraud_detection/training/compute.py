@@ -130,7 +130,7 @@ def ensure_training_compute(
     ml_client: MLClient,
     *,
     name: str,
-    size: str = "Standard_DS3_v2",
+    size: str = "Standard_D4s_v3",
     min_instances: int = 0,
     max_instances: int = 2,
     tags: dict[str, str] | None = None,
