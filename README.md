@@ -1,17 +1,17 @@
-# 🚀 End-to-End Fraud Detection
+# End-to-End Fraud Detection
 
 Production-ready scaffolding for Azure Machine Learning experiments that detect credit card fraud.
 The repository now follows a `src/` layout, ships with a typed CLI, and comes with CI-ready linting
 and unit tests.
 
-## 📦 What you get
+## What you get
 - Azure ML AutoML presets for recall-first and accuracy-first LightGBM models.
 - Reusable utilities for Azure authentication and MLflow model registration.
 - Typer-based CLI (`fraud-cli`) for submitting jobs and registering the best child runs.
 - Conda environment + `pyproject.toml` for reproducible installs.
 - GitHub Actions workflow for linting (Ruff) and testing (Pytest).
 
-## 🗂️ Repository structure
+## Repository structure
 ```
 ├── .github/workflows/ci.yml     # CI pipeline
 ├── .env.example                 # Copy to .env with your Azure credentials
@@ -22,7 +22,7 @@ and unit tests.
 └── tests/                       # Unit tests
 ```
 
-## 🛠️ Setup
+## Setup
 ```bash
 # 1) Create environment (Conda recommended)
 conda env create -f environment.yml
@@ -36,7 +36,7 @@ cp .env.example .env
 pip install -e .[dev]
 ```
 
-## 🚀 Usage
+## Usage
 Ensure must resources for azure service:
 ```bash
 python srcipts/az_prep.py
@@ -84,13 +84,13 @@ fraud-cli deploy
 fraud-cli serve-invoke
 ```
 
-## ✅ Testing & Linting
+## Testing & Linting
 ```bash
 ruff check .
 pytest
 ```
 
-## 📄 Notes
+## Notes
 - The CLI relies on Azure credentials available to `DefaultAzureCredential` (environment variables,
   managed identity, or developer login).
 - Large raw datasets should stay out of version control; the `.gitignore` excludes common artifacts.
