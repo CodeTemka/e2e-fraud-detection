@@ -68,6 +68,10 @@ jobs:
         run: |
           fraud-cli validate-data
 
+      - name: Register best model for production
+        run: |
+          fraud-cli register-best-automl-model
+
       - name: Ensure online endpoint exists
         run: |
           fraud-cli endpoint-create

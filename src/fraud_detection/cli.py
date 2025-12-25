@@ -241,7 +241,7 @@ def register_best_automl_model(
             help=f"Please choose from {list(AUTOML_DEFAULT_METRICS_BARE)}",
             case_sensitive=False,
         ),
-    ] = "norm-macro-recall",
+    ] = "norm_macro_recall",
     best_child_run: Annotated[
         bool,
         typer.Option("--best-child-run", help="Register the best child run model from the AutoML parent run."),
