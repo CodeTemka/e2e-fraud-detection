@@ -46,9 +46,6 @@ def test_submit_automl_rejects_empty_dataset(monkeypatch):
         training_compute = "cpu-cluster"
         default_metric = "norm_macro_recall"
 
-        def require_azure(self):
-            return self
-
         def get_training_compute(self):
             return self.training_compute
 

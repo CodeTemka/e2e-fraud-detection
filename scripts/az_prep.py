@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 def main():
-    settings = get_settings().require_azure()
+    settings = get_settings()
 
     az_path = shutil.which("az")
     if az_path is None:

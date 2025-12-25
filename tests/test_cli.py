@@ -12,9 +12,6 @@ def test_register_models_registers_best_child_run(monkeypatch):
     class FakeSettings:
         automl_train_exp = "automl-fraud-accuracy"
 
-        def require_azure(self):
-            return self
-
     class FakeModel:
         def __init__(self):
             self.name = "model-name"
@@ -53,9 +50,6 @@ def test_register_models_best_by_metric(monkeypatch):
     class FakeSettings:
         automl_train_exp = "automl-fraud-accuracy"
 
-        def require_azure(self):
-            return self
-
     monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
     monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
 
@@ -82,14 +76,12 @@ def test_submit_automl_uses_defaults(monkeypatch):
 
     class FakeSettings:
         dataset_name = "azureml:dataset:1"
+        registered_data_path = "azureml:dataset:1"
         training_compute = "cpu-cluster"
         default_metric = "norm_macro_recall"
         instance_type = "Standard_DS3_v2"
         compute_min_nodes = 0
         compute_max_nodes = 2
-
-        def require_azure(self):
-            return self
 
         def get_training_compute(self):
             return self.training_compute

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Azure (defaults in code; can be overridden by env vars in CI)
+    # Azure (defaults in code; can be overridden by env vars)
     subscription_id: str = Field(
         default=DEFAULT_SUBSCRIPTION_ID,
         validation_alias=AliasChoices("SUBSCRIPTION_ID", "AZURE_SUBSCRIPTION_ID"),
@@ -103,18 +103,6 @@ class Settings(BaseSettings):
                 f"Missing required environment variables for {context}: {', '.join(missing)}"
             )
         return self
-
-    def require_azure(self) -> "Settings":
-        # With defaults set above, this will pass in CI even without .env
-        return self._require(
-            {
-                "subscription_id": "SUBSCRIPTION_ID",
-                "resource_group": "RESOURCE_GROUP",
-                "workspace_name": "WORKSPACE_NAME",
-                "location": "LOCATION",
-            },
-            context="Azure",
-        )
 
     def require_github(self) -> "Settings":
         return self._require(

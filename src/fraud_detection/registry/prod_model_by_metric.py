@@ -110,7 +110,7 @@ def register_prod_model(
       - None if no registration was performed (equal metrics case).
     """
     cfg = settings or get_settings()
-    ml_client = ml_client or get_ml_client(settings=cfg.require_azure())
+    ml_client = ml_client or get_ml_client(settings=cfg)
 
     mlflow_tracking_uri(ml_client)
 
