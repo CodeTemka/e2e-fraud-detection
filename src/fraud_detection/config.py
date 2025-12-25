@@ -56,16 +56,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AML_DATASET", "DATASET_NAME"),
     )
     local_data_path: Path = ROOT_DIR / "data" / "creditcard.csv"
-
-    # IMPORTANT:
-    # - AutoML expects MLTable input
-    # - So this should point to an MLTable data asset version (e.g. :2), not a uri_file (:1).
-    registered_data_path: str = "azureml:creditcard:2"
+    registered_data_path: str = "azureml:creditcard:1"
 
     data_path_mltable: Path = ROOT_DIR / "data"
 
     # Default model
-    # IMPORTANT: your AutoML metric list uses underscores (norm_macro_recall)
     default_metric: str = "norm_macro_recall"
     prod_model_name: str = "production-model"
 
@@ -84,7 +79,7 @@ class Settings(BaseSettings):
         ),
     )
     deployment_instance_type: str = Field(
-        default="Standard_DS3_v2",
+        default="Standard_DS2_v2",
         validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
     )
     instance_type: str = "Standard_DS3_v2"
