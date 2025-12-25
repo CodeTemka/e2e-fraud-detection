@@ -15,6 +15,7 @@ from fraud_detection.data.data_validation import (
     DataValidationError,
     ValidationOptions,
     validate_creditcard_data,
+    DEFAULT_CLASS_RATIO_BOUNDS
 )
 from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
@@ -117,14 +118,14 @@ def validate_data(
             "--balance-lower",
             help="Lower bound for the class balance ratio (fraudulent / total)",
         ),
-    ] = 0.005,
+    ] = DEFAULT_CLASS_RATIO_BOUNDS[0],
     balance_upper: Annotated[
         float,
         typer.Option(
             "--balance-upper",
             help="Upper bound for the class balance ratio (fraudulent / total)",
         ),
-    ] = 0.02,
+    ] = DEFAULT_CLASS_RATIO_BOUNDS[1],
 ):
     """Validate a local fraud dataset (CSV or MLTable folder)."""
     settings = _resolve_settings()
