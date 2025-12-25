@@ -1,5 +1,4 @@
 """Utilities for validating credit card fraud datasets."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,8 +8,8 @@ from pandas.api import types as ptypes
 
 REQUIRED_COLUMNS: tuple[str, ...] = (
     "Time",
-    "Amount",
     *[f"V{i}" for i in range(1, 29)],
+    "Amount",
     "Class",
 )
 
