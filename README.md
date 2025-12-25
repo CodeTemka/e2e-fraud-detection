@@ -30,13 +30,23 @@ conda activate fraud-detection
 
 # 2) Provide credentials
 cp .env.example .env
-# edit the values for your subscription, resource group, and workspace
+# edit the values for your credentials
 
 # 3) Install the project (already handled by the env file, but works standalone too)
 pip install -e .[dev]
 ```
 
 ## 🚀 Usage
+Ensure must resources for azure service:
+```bash
+python srcipts/az_prep.py
+```
+
+Ensure must github secret is created:
+```bash
+python scripts/git_add_secret.py
+```
+
 Register the local credit card dataset as an Azure ML data asset (defaults to `data/creditcard.csv`):
 ```bash
 python scripts/register_local_data.py
