@@ -34,6 +34,7 @@ jobs:
         with:
           # Checkout the exact commit that CI ran on
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
