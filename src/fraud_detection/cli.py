@@ -31,7 +31,7 @@ from fraud_detection.training.automl import (
     create_automl_job,
     submit_job,
 )
-from fraud_detection.training.compute import ensure_training_compute
+from fraud_detection.training.compute import ensure_deployment_compute, ensure_training_compute
 from fraud_detection.utils.logging import get_logger
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
@@ -323,11 +323,23 @@ def deploy():
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    try:
+        deployment_compute = settings.get_deployment_compute()
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     instance_count = settings.instance_count
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     model_name = settings.prod_model_name
 
+    ensure_deployment_compute(
+        ml_client,
+        name=deployment_compute,
+        size=instance_type,
+        min_instances=0,
+        max_instances=1,
+    )
     deployment = deploy_model(
         ml_client,
         endpoint_name=endpoint_name,
