@@ -83,6 +83,10 @@ class Settings(BaseSettings):
             "COMPUTE_CLUSTER",
         ),
     )
+    deployment_compute: str = Field(
+        default="deploy-cluster",
+        validation_alias=AliasChoices("DEPLOYMENT_COMPUTE", "AML_COMPUTE_DEPLOY"),
+    )
     deployment_instance_type: str = Field(
         default="Standard_DS3_v2",
         validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
@@ -151,6 +155,14 @@ class Settings(BaseSettings):
             raise ValueError("Training compute is not configured. Set TRAINING_COMPUTE.")
         return compute
 
+    def get_deployment_compute(self) -> str:
+        compute = (self.deployment_compute or "").strip()
+        if not compute:
+            raise ValueError(
+                "Deployment compute is not configured. Set DEPLOYMENT_COMPUTE."
+            )
+        return compute
+
     def get_deployment_instance_type(self) -> str:
         instance_type = (self.deployment_instance_type or "").strip()
         if not instance_type:
@@ -158,6 +170,7 @@ class Settings(BaseSettings):
                 "Deployment instance type is not configured. Set DEPLOYMENT_INSTANCE_TYPE."
             )
         return instance_type
+
 
 
 @lru_cache(maxsize=1)
