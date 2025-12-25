@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Optional
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import ManagedOnlineDeployment
@@ -14,7 +13,7 @@ from fraud_detection.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _parse_version(v: Optional[str]) -> int:
+def _parse_version(v: str | None) -> int:
     """AzureML model versions are typically numeric strings; be defensive."""
     try:
         return int(v or 0)

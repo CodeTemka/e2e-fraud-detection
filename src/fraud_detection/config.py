@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     # Default smoke test json
     smoke_test: Path = ROOT_DIR / "sample_request.json"
 
-    def _require(self, required: dict[str, str], *, context: str) -> "Settings":
+    def _require(self, required: dict[str, str], *, context: str) -> Settings:
         missing = [env for attr, env in required.items() if not getattr(self, attr)]
         if missing:
             raise ValueError(
@@ -104,7 +104,7 @@ class Settings(BaseSettings):
             )
         return self
 
-    def require_github(self) -> "Settings":
+    def require_github(self) -> Settings:
         return self._require(
             {
                 "github_token": "GITHUB_TOKEN",
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
             context="Github",
         )
 
-    def require_kaggle(self) -> "Settings":
+    def require_kaggle(self) -> Settings:
         return self._require(
             {
                 "kaggle_username": "KAGGLE_USERNAME",

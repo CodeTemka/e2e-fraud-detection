@@ -12,10 +12,10 @@ from azure.core.exceptions import ResourceNotFoundError
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import Settings, get_settings
 from fraud_detection.data.data_validation import (
+    DEFAULT_CLASS_RATIO_BOUNDS,
     DataValidationError,
     ValidationOptions,
     validate_creditcard_data,
-    DEFAULT_CLASS_RATIO_BOUNDS
 )
 from fraud_detection.registry.automl_registry import (
     list_completed_jobs,
@@ -321,12 +321,8 @@ def deploy():
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    try:
-        deployment_compute = settings.get_deployment_compute()
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
-    instance_count = settings.instance_count
+
+    instance_count = 1
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     model_name = settings.prod_model_name
