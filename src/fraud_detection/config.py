@@ -35,10 +35,12 @@ class Settings(BaseSettings):
 
     # Default dataset
     dataset_name: str = Field(
-        default="credit-card-data",
+        default="creditcard",
         validation_alias=AliasChoices("AML_DATASET", "DATASET_NAME"),
     )
     local_data_path: Path = ROOT_DIR / "data" / "creditcard.csv"
+    registered_data_path: str = "azureml:creditcard:1"
+    data_path_mltable: Path = ROOT_DIR / "data"
 
     # Default model
     default_metric: str = "norm-macro-recall"

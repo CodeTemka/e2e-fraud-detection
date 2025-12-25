@@ -15,7 +15,7 @@ def register_local_data() -> None:
     ml_client = get_ml_client(settings=settings)
 
     dataset_name = settings.dataset_name
-    local_data_path = settings.local_data_path
+    data_path = settings.data_path_mltable
     version = "1"
 
     try:
@@ -28,13 +28,13 @@ def register_local_data() -> None:
     data_asset = Data(
         name=dataset_name,
         version=version,
-        path=str(local_data_path),
-        type=AssetTypes.URI_FILE,
-        description="Local dataset uploaded from repo.",
+        path=str(data_path),
+        type=AssetTypes.MLTABLE,
+        description="Local CSV registered as MLTable",
     )
 
     ml_client.data.create_or_update(data_asset)
-    logger.info("Registered dataset '%s' version '%s' from '%s'.", dataset_name, version, local_data_path)
+    logger.info("Registered dataset '%s' version '%s'.", dataset_name, version)
 
 if __name__ == "__main__":
     register_local_data()

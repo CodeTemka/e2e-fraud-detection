@@ -135,15 +135,15 @@ def submit_job(ml_client: MLClient, job: Any) -> str:
 
 
 def _metric_check(metric: str | ClassificationPrimaryMetrics) -> str:
-    """Validate metric strictly against supported list; return the metric string."""
-
-    metric_str = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else metric
+    metric_str = metric.value if isinstance(metric, ClassificationPrimaryMetrics) else str(metric)
+    metric_str = metric_str.strip().replace("-", "_")  # accept hyphen or underscore
 
     if metric_str not in SUPPORTED_CLASSIFICATION_METRICS:
         allowed = ", ".join(sorted(SUPPORTED_CLASSIFICATION_METRICS))
         raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
 
     return metric_str
+
 
 
 def automl_job_builder(

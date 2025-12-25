@@ -178,7 +178,24 @@ def submit_automl(
     ml_client = _resolve_ml_client(settings)
 
     resolved_metric = metric or settings.default_metric
-    training_data = dataset if dataset is not None else settings.dataset_name
+    training_data = dataset if dataset is not None else settings.registered_data_path
+
+    def _ensure_mltable_ref(training_data: str) -> None:
+    # If local path, ensure it’s an MLTable folder
+        if not training_data.startswith("azureml:"):
+            p = Path(training_data)
+            if not (p.exists() and p.is_dir() and (p / "MLTable").exists()):
+                raise ValueError(
+                    "AutoML requires MLTable. Provide an MLTable folder path (containing a file named 'MLTable') "
+                    "or an Azure ML MLTable data asset like 'azureml:<name>:<version>'."
+                )
+    # in submit_automl()
+    try:
+        _ensure_mltable_ref(training_data)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc 
+    
     compute_value = compute.strip() if isinstance(compute, str) else None
     try:
         compute_target = compute_value or settings.get_training_compute()
