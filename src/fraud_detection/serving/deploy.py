@@ -42,7 +42,7 @@ def deploy_model(
     deployment_name: str = "blue",
     model_name: str,
     model_version: str | None = None,
-    instance_type: str | None = None,
+    instance_type: str | None = "Standard_D2a_v4",
     instance_count: int = 1,
     tags: Mapping[str, str] | None = None,
 ) -> ManagedOnlineDeployment:
