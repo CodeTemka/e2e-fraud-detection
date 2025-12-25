@@ -92,7 +92,7 @@ def _validate_local_dataset(
         check_balance=not skip_balance_check,
         class_ratio_bounds=(balance_lower, balance_upper),
     )
-    validate_creditcard_data(df, options)
+    validate_creditcard_data(df, options=options)
 
 
 #This function should be more like validate data for training jobs.
