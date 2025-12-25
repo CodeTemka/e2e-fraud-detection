@@ -78,10 +78,6 @@ class Settings(BaseSettings):
             "COMPUTE_CLUSTER",
         ),
     )
-    deployment_compute: str = Field(
-        default="deploy-cluster",
-        validation_alias=AliasChoices("DEPLOYMENT_COMPUTE", "AML_COMPUTE_DEPLOY"),
-    )
     deployment_instance_type: str = Field(
         default="Standard_D2a_v4",
         validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
