@@ -29,7 +29,7 @@ def get_ml_client(
         An Azure ML client.
     """
 
-    resolved_settings = (settings or get_settings()).require_azure()
+    resolved_settings = settings or get_settings()
     resolved_credential = credential or build_default_credential()
 
     logger.info(

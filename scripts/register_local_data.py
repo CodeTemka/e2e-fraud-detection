@@ -11,7 +11,7 @@ from fraud_detection.utils.logging import get_logger
 logger = get_logger(__name__)
 
 def register_local_data() -> None:
-    settings = get_settings().require_azure()
+    settings = get_settings()
     ml_client = get_ml_client(settings=settings)
 
     dataset_name = settings.dataset_name

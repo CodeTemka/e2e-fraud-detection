@@ -31,15 +31,14 @@ from fraud_detection.training.automl import (
     create_automl_job,
     submit_job,
 )
-from fraud_detection.training.compute import ensure_deployment_compute, ensure_training_compute
+from fraud_detection.training.compute import ensure_training_compute
 from fraud_detection.utils.logging import get_logger
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 logger = get_logger(__name__)
 
-def _resolve_settings(*, require_azure: bool = False) -> Settings:
-    settings = get_settings()
-    return settings.require_azure() if require_azure else settings
+def _resolve_settings() -> Settings:
+    return get_settings()
 
 
 def _resolve_ml_client(settings: Settings) -> object:
@@ -175,14 +174,14 @@ def submit_automl(
     ] = None,
 ):
     """Submit an AutoML classification job for fraud detection."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
 
     resolved_metric = metric or settings.default_metric
     training_data = dataset if dataset is not None else settings.registered_data_path
 
     def _ensure_mltable_ref(training_data: str) -> None:
-    # If local path, ensure it’s an MLTable folder
+        # If local path, ensure it’s an MLTable folder
         if not training_data.startswith("azureml:"):
             p = Path(training_data)
             if not (p.exists() and p.is_dir() and (p / "MLTable").exists()):
@@ -190,12 +189,16 @@ def submit_automl(
                     "AutoML requires MLTable. Provide an MLTable folder path (containing a file named 'MLTable') "
                     "or an Azure ML MLTable data asset like 'azureml:<name>:<version>'."
                 )
-    # in submit_automl()
+
+    if not training_data:
+        typer.echo("Provide --dataset or set AML_DATASET.", err=True)
+        raise typer.Exit(code=1)
+
     try:
         _ensure_mltable_ref(training_data)
     except ValueError as exc:
         typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc 
+        raise typer.Exit(code=1) from exc
     
     compute_value = compute.strip() if isinstance(compute, str) else None
     try:
@@ -203,11 +206,6 @@ def submit_automl(
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-
-    if not training_data:
-        typer.echo("Provide --dataset or set AML_DATASET.", err=True)
-        raise typer.Exit(code=1)
-
 
     ensure_training_compute(
         ml_client,
@@ -253,7 +251,7 @@ def register_best_automl_model(
     ] = True,
 ):
     """Register the best AutoML child run model or the best AutoML model by metric."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
     experiment = settings.automl_train_exp
     if best_child_run:
@@ -289,7 +287,7 @@ def register_best_automl_model(
 @app.command()
 def endpoint_create():
     """Create a managed online endpoint."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
     name = settings.endpoint_name
     ep = create_endpoint(
@@ -304,7 +302,7 @@ def endpoint_create():
 @app.command()
 def endpoint_delete():
     """Delete a managed online endpoint."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
     name = settings.endpoint_name
     delete_endpoint(ml_client, name=name)
@@ -316,7 +314,7 @@ def endpoint_delete():
 @app.command()
 def deploy():
     """Deploy a registered model to a managed online endpoint."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
     try:
         instance_type = settings.get_deployment_instance_type()
@@ -333,13 +331,6 @@ def deploy():
     deployment_name = settings.deployment_name
     model_name = settings.prod_model_name
 
-    ensure_deployment_compute(
-        ml_client,
-        name=deployment_compute,
-        size=instance_type,
-        min_instances=0,
-        max_instances=1,
-    )
     deployment = deploy_model(
         ml_client,
         endpoint_name=endpoint_name,
@@ -354,7 +345,7 @@ def deploy():
 @app.command()
 def serve_invoke():
     """Invoke a managed online endpoint deployment (smoke test)."""
-    settings = _resolve_settings(require_azure=True)
+    settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name

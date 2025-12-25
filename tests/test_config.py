@@ -1,7 +1,5 @@
 import importlib
 
-import pytest
-
 from fraud_detection import config
 
 
@@ -41,9 +39,6 @@ def test_settings_allows_missing_azure_env(monkeypatch):
     config.get_settings.cache_clear()
     settings = config.get_settings()
 
-    assert settings.subscription_id is None
-    assert settings.resource_group is None
-    assert settings.workspace_name is None
-
-    with pytest.raises(ValueError, match="SUBSCRIPTION_ID"):
-        settings.require_azure()
+    assert settings.subscription_id == config.DEFAULT_SUBSCRIPTION_ID
+    assert settings.resource_group == config.DEFAULT_RESOURCE_GROUP
+    assert settings.workspace_name == config.DEFAULT_WORKSPACE_NAME
