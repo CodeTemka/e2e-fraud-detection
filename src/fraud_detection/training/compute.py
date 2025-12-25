@@ -147,30 +147,8 @@ def ensure_training_compute(
     )
 
 
-def ensure_deployment_compute(
-    ml_client: MLClient,
-    *,
-    name: str,
-    size: str = "Standard_DS3_v2",
-    min_instances: int = 0,
-    max_instances: int = 1,
-    tags: dict[str, str] | None = None,
-) -> Any:
-    """Ensure compute for deployment workflows exists."""
-
-    return ensure_compute(
-        ml_client,
-        name=name,
-        size=size,
-        min_instances=min_instances,
-        max_instances=max_instances,
-        tags=tags,
-    )
-
-
 __all__ = [
     "delete_compute",
     "ensure_compute",
     "ensure_training_compute",
-    "ensure_deployment_compute",
 ]
