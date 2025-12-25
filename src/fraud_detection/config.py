@@ -83,7 +83,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DEPLOYMENT_COMPUTE", "AML_COMPUTE_DEPLOY"),
     )
     deployment_instance_type: str = Field(
-        default="Standard_D4s_v3",
+        default="Standard_F4s_v2",
         validation_alias=AliasChoices("DEPLOYMENT_INSTANCE_TYPE"),
     )
     instance_type: str = "Standard_DS3_v2"
