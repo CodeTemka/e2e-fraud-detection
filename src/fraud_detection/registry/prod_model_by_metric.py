@@ -95,13 +95,19 @@ def register_prod_model(
     *,
     ml_client: MLClient | None = None,
     settings: Settings | None = None,
-) -> str:
+) -> str | None:
     """
     Compare best AutoML run vs current production model.
-    If best AutoML metric is better, register it as the new production model name.
-    Otherwise register it under a shadow model name (so prod stays unchanged).
 
-    Returns the model name used for registration.
+    Rules:
+    - If no prod model exists: promote best to prod_model_name.
+    - If best metric > prod metric: promote best to prod_model_name.
+    - If best metric < prod metric: register best under a shadow model name.
+    - If best metric == prod metric: DO NOTHING (no registration at all).
+
+    Returns:
+      - The model name used for registration, OR
+      - None if no registration was performed (equal metrics case).
     """
     cfg = settings or get_settings()
     ml_client = ml_client or get_ml_client(settings=cfg.require_azure())
@@ -114,6 +120,18 @@ def register_prod_model(
 
     # Current prod metric (if any)
     prod_metric = current_prod_model_metric(ml_client, metric, settings=cfg)
+
+    # NEW: if both exist and are equal -> do nothing
+    if prod_metric is not None and best.metric_value == prod_metric:
+        logger.info(
+            "Model promotion decision: promote=False (equal metrics) metric=%s best=%s current_prod=%s run_id=%s. "
+            "No registration performed.",
+            metric,
+            best.metric_value,
+            prod_metric,
+            best_run_id,
+        )
+        return None
 
     should_promote = (prod_metric is None) or (best.metric_value > prod_metric)
     chosen_name = cfg.prod_model_name if should_promote else _shadow_model_name(best_run_id)
