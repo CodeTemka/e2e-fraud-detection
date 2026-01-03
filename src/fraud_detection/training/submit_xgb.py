@@ -1,43 +1,128 @@
 from __future__ import annotations
 
-import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
-from azure.ai.ml import Input, MLClient, command
+from azure.ai.ml import Input, MLClient, Output, command
+from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Environment
-from azure.ai.ml.sweep import Choice, LogUniform, Uniform, MedianStoppingPolicy
-from azure.identity import DefaultAzureCredential
+from azure.ai.ml.sweep import Choice, LogUniform, MedianStoppingPolicy, Uniform
+
+from fraud_detection.azure.client import get_ml_client
+from fraud_detection.config import ROOT_DIR, Settings, get_settings
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+SUPPORTED_XGB_METRICS = {"average_precision", "roc_auc"}
 
 
-def main() -> None:
-    # ---- workspace connection (fill these in or load from your own config) ----
-    subscription_id = os.environ.get("AZ_SUBSCRIPTION_ID", "<SUBSCRIPTION_ID>")
-    resource_group = os.environ.get("AZ_RESOURCE_GROUP", "<RESOURCE_GROUP>")
-    workspace_name = os.environ.get("AZ_WORKSPACE_NAME", "<AML_WORKSPACE_NAME>")
+def _metric_check(metric: str) -> str:
+    metric_str = (metric or "").strip().replace("-", "_")
+    if metric_str not in SUPPORTED_XGB_METRICS:
+        allowed = ", ".join(sorted(SUPPORTED_XGB_METRICS))
+        raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
+    return metric_str
 
-    ml_client = MLClient(
-        credential=DefaultAzureCredential(),
-        subscription_id=subscription_id,
-        resource_group_name=resource_group,
-        workspace_name=workspace_name,
+
+def _resolve_data_input(training_data: str) -> Input:
+    if not training_data:
+        raise ValueError("training_data is empty. Provide an MLTable asset path/ID/URI.")
+
+    if training_data.startswith("azureml:"):
+        return Input(type=AssetTypes.MLTABLE, path=training_data)
+
+    path = Path(training_data)
+    if path.is_dir() and (path / "MLTable").exists():
+        return Input(type=AssetTypes.MLTABLE, path=str(path))
+
+    if path.is_file() and path.suffix.lower() == ".csv":
+        return Input(type=AssetTypes.URI_FILE, path=str(path))
+
+    return Input(type=AssetTypes.URI_FILE, path=training_data)
+
+
+@dataclass
+class XGBSweepConfig:
+    experiment_name: str
+    training_data: str
+
+    compute: str | None
+    label_column: str = "Class"
+    primary_metric: str = "average_precision"
+
+    environment_name: str = "xgb-sweep-env"
+    environment_version: str | None = None
+    environment_file: Path = field(
+        default_factory=lambda: ROOT_DIR / "src" / "fraud_detection" / "training" / "xgb_env.yaml"
+    )
+    environment_image: str = "mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest"
+
+    max_total_trials: int = 30
+    max_concurrent_trials: int = 4
+    timeout_minutes: int = 180
+    sampling_algorithm: str = "random"
+
+    early_stopping_delay: int = 5
+    early_stopping_interval: int = 2
+
+    tags: dict[str, str] = field(default_factory=dict)
+
+
+def xgb_sweep_job_builder(
+    *,
+    training_data: str,
+    metric: str = "average_precision",
+    compute: str | None = None,
+    settings: Settings | None = None,
+) -> XGBSweepConfig:
+    resolved_metric = _metric_check(metric)
+    resolved_settings = settings or get_settings()
+    compute_target = (compute or "").strip() or resolved_settings.get_training_compute()
+    return XGBSweepConfig(
+        experiment_name=resolved_settings.xgb_sweep_exp,
+        training_data=training_data,
+        compute=compute_target,
+        label_column="Class",
+        primary_metric=resolved_metric,
+        environment_name=resolved_settings.xgb_env_name,
+        environment_version=resolved_settings.xgb_env_version,
+        tags={"project": "fraud-detection", "model": "xgboost", "metric": resolved_metric},
     )
 
-    # ---- compute cluster name (must already exist) ----
-    compute_name = "cpu-cluster"
 
-    # ---- environment (register it once; then reuse by name:version) ----
+def resolve_xgb_environment(ml_client: MLClient, config: XGBSweepConfig) -> str:
+    if config.environment_version:
+        env_id = f"{config.environment_name}:{config.environment_version}"
+        logger.info("Using existing XGBoost environment", extra={"environment": env_id})
+        return env_id
+
+    if not config.environment_file.exists():
+        raise FileNotFoundError(f"XGBoost environment file not found: {config.environment_file}")
+
     job_env = Environment(
-        name="xgb-sweep-env",
+        name=config.environment_name,
         description="XGBoost sweep environment",
-        conda_file="env/conda.yaml",
-        image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest",
+        conda_file=str(config.environment_file),
+        image=config.environment_image,
     )
     job_env = ml_client.environments.create_or_update(job_env)
+    env_id = f"{job_env.name}:{job_env.version}"
+    logger.info("Registered XGBoost environment", extra={"environment": env_id})
+    return env_id
 
-    # ---- base command job ----
+
+def create_xgb_sweep_job(config: XGBSweepConfig, *, environment: str) -> Any:
+    if not config.experiment_name:
+        raise ValueError("config.experiment_name is empty.")
+
+    data_input = _resolve_data_input(config.training_data)
+
     base_job = command(
-        code="./src",
+        code=str(ROOT_DIR / "src"),
         command=(
-            "python train_xgb.py "
+            "python -m fraud_detection.training.train_xgb "
             "--train_data ${{inputs.train_data}} "
             "--label_col ${{inputs.label_col}} "
             "--n_estimators ${{inputs.n_estimators}} "
@@ -52,13 +137,8 @@ def main() -> None:
             "--output_dir ${{outputs.output_dir}}"
         ),
         inputs={
-            # Point this to your own data asset or datastore path:
-            # Example options:
-            #  - Input(type="uri_file", path="azureml:your_data_asset@latest")
-            #  - Input(type="uri_file", path="https://.../your.csv")
-            "train_data": Input(type="uri_file", path="azureml:credit-card-data@latest"),
-            "label_col": "Class",
-            # defaults (will be overridden by sweep below)
+            "train_data": data_input,
+            "label_col": config.label_column,
             "n_estimators": 600,
             "max_depth": 5,
             "learning_rate": 0.05,
@@ -69,14 +149,14 @@ def main() -> None:
             "reg_lambda": 1.0,
             "scale_pos_weight": 1.0,
         },
-        outputs={"output_dir": Input(type="uri_folder")},
-        environment=f"{job_env.name}:{job_env.version}",
-        compute=compute_name,
-        experiment_name="xgb-fraud-sweep",
+        outputs={"output_dir": Output(type=AssetTypes.URI_FOLDER)},
+        environment=environment,
+        compute=config.compute,
+        experiment_name=config.experiment_name,
         display_name="xgb-train",
+        tags=config.tags,
     )
 
-    # ---- override inputs with parameter expressions for tuning ----
     job_for_sweep = base_job(
         learning_rate=LogUniform(min_value=1e-3, max_value=0.2),
         max_depth=Choice(values=[3, 4, 5, 6, 7, 8]),
@@ -89,24 +169,56 @@ def main() -> None:
         scale_pos_weight=Choice(values=[1.0, 50.0, 100.0, 200.0]),
     )
 
-    # ---- build sweep job ----
     sweep_job = job_for_sweep.sweep(
-        compute=compute_name,
-        sampling_algorithm="random",
-        primary_metric="average_precision",  # must match mlflow.log_metric("average_precision", ...)
+        compute=config.compute,
+        sampling_algorithm=config.sampling_algorithm,
+        primary_metric=config.primary_metric,
         goal="Maximize",
     )
 
-    # resource limits and early termination (recommended pattern)
-    sweep_job.set_limits(max_total_trials=30, max_concurrent_trials=4, timeout=3 * 60 * 60)
-    sweep_job.early_termination = MedianStoppingPolicy(delay_evaluation=5, evaluation_interval=2)
+    sweep_job.set_limits(
+        max_total_trials=config.max_total_trials,
+        max_concurrent_trials=config.max_concurrent_trials,
+        timeout=config.timeout_minutes * 60,
+    )
+    sweep_job.early_termination = MedianStoppingPolicy(
+        delay_evaluation=config.early_stopping_delay,
+        evaluation_interval=config.early_stopping_interval,
+    )
 
     sweep_job.display_name = "xgb-sweep"
-    sweep_job.experiment_name = "xgb-fraud-sweep"
+    sweep_job.experiment_name = config.experiment_name
+    sweep_job.tags = config.tags
+    return sweep_job
 
-    # ---- submit ----
-    created = ml_client.jobs.create_or_update(sweep_job)
-    print(f"Submitted sweep job: {created.name}")
+
+def submit_xgb_sweep_job(ml_client: MLClient, config: XGBSweepConfig) -> str:
+    environment = resolve_xgb_environment(ml_client, config)
+    job = create_xgb_sweep_job(config, environment=environment)
+    created = ml_client.jobs.create_or_update(job)
+    logger.info("Submitted XGBoost sweep job", extra={"job_name": created.name})
+    return created.name
+
+
+def main() -> None:
+    settings = get_settings()
+    ml_client = get_ml_client(settings=settings)
+
+    training_data = settings.registered_data_path
+    config = xgb_sweep_job_builder(training_data=training_data, settings=settings)
+
+    job_name = submit_xgb_sweep_job(ml_client, config)
+    print(f"Submitted sweep job: {job_name}")
+
+
+__all__ = [
+    "XGBSweepConfig",
+    "SUPPORTED_XGB_METRICS",
+    "create_xgb_sweep_job",
+    "submit_xgb_sweep_job",
+    "xgb_sweep_job_builder",
+    "resolve_xgb_environment",
+]
 
 
 if __name__ == "__main__":

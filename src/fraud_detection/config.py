@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     # Default experiments
     custom_train_exp: str = "custom-train"
     automl_train_exp: str = "automl-train"
+    xgb_sweep_exp: str = "xgb-sweep"
 
     # Default compute
     training_compute: str = Field(
@@ -86,6 +87,16 @@ class Settings(BaseSettings):
     instance_count: int = 1
     compute_min_nodes: int = 0
     compute_max_nodes: int = 2
+
+    # XGBoost sweep environment
+    xgb_env_name: str = Field(
+        default="xgb-sweep-env",
+        validation_alias=AliasChoices("XGB_ENV_NAME"),
+    )
+    xgb_env_version: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("XGB_ENV_VERSION"),
+    )
 
     # Default endpoint
     endpoint_name: str = "fraud-detection"

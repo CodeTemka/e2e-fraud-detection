@@ -9,6 +9,9 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
+from fraud_detection.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
@@ -47,6 +50,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    logger.info(
+        "Loading training data",
+        extra={"train_data": args.train_data, "label_col": args.label_col},
+    )
     df = pd.read_csv(args.train_data)
     if args.label_col not in df.columns:
         raise ValueError(f"label_col '{args.label_col}' not found. Columns: {list(df.columns)[:30]} ...")
@@ -128,6 +135,14 @@ def main() -> None:
 
     mlflow.end_run()
 
+    logger.info(
+        "Training complete",
+        extra={
+            "average_precision": ap,
+            "roc_auc": auc,
+            "model_path": str(model_path),
+        },
+    )
     print(f"Done. average_precision={ap:.6f}, roc_auc={auc:.6f}")
     print(f"Model saved to: {model_path}")
 
