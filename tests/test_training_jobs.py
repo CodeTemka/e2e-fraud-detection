@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 from fraud_detection import cli
 from fraud_detection.registry.automl_registry import list_completed_jobs
 from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
+from fraud_detection.training.submit_xgb import XGBSweepConfig, create_xgb_sweep_job, xgb_sweep_job_builder
 
 runner = CliRunner()
 
@@ -87,3 +88,41 @@ def test_create_automl_job_uses_settings_compute(monkeypatch):
 
     job = create_automl_job(config)
     assert job.compute == "cpu-cluster"
+
+
+def test_xgb_sweep_job_builder_uses_settings(monkeypatch):
+    class FakeSettings:
+        training_compute = "cpu-cluster"
+        xgb_sweep_exp = "xgb-exp"
+        xgb_env_name = "xgb-env"
+        xgb_env_version = "1"
+
+        def get_training_compute(self):
+            return self.training_compute
+
+    config = xgb_sweep_job_builder(
+        training_data="azureml:demo:1",
+        metric="average_precision",
+        settings=FakeSettings(),
+    )
+
+    assert config.experiment_name == "xgb-exp"
+    assert config.compute == "cpu-cluster"
+    assert config.environment_name == "xgb-env"
+    assert config.environment_version == "1"
+
+
+def test_create_xgb_sweep_job_builds_expected_job():
+    config = XGBSweepConfig(
+        experiment_name="xgb-exp",
+        training_data="azureml:demo:1",
+        compute="cpu-cluster",
+        environment_name="xgb-env",
+        environment_version="1",
+    )
+
+    job = create_xgb_sweep_job(config, environment="xgb-env:1")
+
+    assert job.experiment_name == "xgb-exp"
+    assert job.compute == "cpu-cluster"
+    assert job.objective.primary_metric == "average_precision"

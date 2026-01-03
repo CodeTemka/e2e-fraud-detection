@@ -31,6 +31,13 @@ from fraud_detection.training.automl import (
     create_automl_job,
     submit_job,
 )
+from fraud_detection.training.submit_xgb import (
+    SUPPORTED_XGB_METRICS,
+    create_xgb_sweep_job,
+    resolve_xgb_environment,
+    submit_xgb_sweep_job,
+    xgb_sweep_job_builder,
+)
 from fraud_detection.training.compute import ensure_training_compute
 from fraud_detection.utils.logging import get_logger
 
@@ -227,6 +234,75 @@ def submit_automl(
     job = create_automl_job(config=automl_job_config)
     job_name = submit_job(ml_client=ml_client, job=job)
     typer.echo(f"Submitted AutoML job: {job_name}")
+
+
+@app.command()
+def submit_xgb_sweep(
+    dataset: Annotated[
+        str | None,
+        typer.Option("--dataset", help="Azure ML dataset name or ID to use for training."),
+    ] = None,
+    metric: Annotated[
+        str,
+        typer.Option(
+            "--metric",
+            "-m",
+            help=f"Primary metric for the sweep (choices: {sorted(SUPPORTED_XGB_METRICS)}).",
+            case_sensitive=False,
+        ),
+    ] = "average_precision",
+    compute: Annotated[
+        str | None,
+        typer.Option("--compute", help="Azure ML compute cluster name for training (optional override)."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Build the sweep job without submitting it."),
+    ] = False,
+):
+    """Submit an XGBoost hyperparameter sweep job."""
+    settings = _resolve_settings()
+    ml_client = _resolve_ml_client(settings)
+
+    training_data = dataset if dataset is not None else settings.registered_data_path
+    if not training_data:
+        typer.echo("Provide --dataset or set AML_DATASET.", err=True)
+        raise typer.Exit(code=1)
+
+    compute_value = compute.strip() if isinstance(compute, str) else None
+    try:
+        compute_target = compute_value or settings.get_training_compute()
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    ensure_training_compute(
+        ml_client,
+        name=compute_target,
+        size=settings.instance_type,
+        min_instances=settings.compute_min_nodes,
+        max_instances=settings.compute_max_nodes,
+    )
+
+    try:
+        config = xgb_sweep_job_builder(
+            training_data=training_data,
+            metric=metric,
+            compute=compute_target,
+            settings=settings,
+        )
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if dry_run:
+        environment = resolve_xgb_environment(ml_client, config)
+        job = create_xgb_sweep_job(config, environment=environment)
+        typer.echo(f"Built XGBoost sweep job: {job.experiment_name}")
+        return
+
+    job_name = submit_xgb_sweep_job(ml_client, config)
+    typer.echo(f"Submitted XGBoost sweep job: {job_name}")
 
 
 

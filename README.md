@@ -67,6 +67,16 @@ Force an accuracy-focused LightGBM-only search:
 fraud-cli submit-automl --metric accuracy --algorithms lightgbm
 ```
 
+Submit an XGBoost hyperparameter sweep (uses the registered data asset by default):
+```bash
+fraud-cli submit-xgb-sweep --metric average_precision
+```
+
+Optional dry-run to validate the job definition (still registers the XGBoost environment if missing):
+```bash
+fraud-cli submit-xgb-sweep --dry-run
+```
+
 Register the best model for the current AutoML experiment:
 ```bash
 fraud-cli register-best-automl-model --best-by-metric --metric norm-macro-recall
@@ -93,6 +103,8 @@ pytest
 ## Notes
 - The CLI relies on Azure credentials available to `DefaultAzureCredential` (environment variables,
   managed identity, or developer login).
+- XGBoost sweep jobs use the Conda spec at `src/fraud_detection/training/xgb_env.yaml`. Override the
+  registered environment via `XGB_ENV_NAME` / `XGB_ENV_VERSION` if needed.
 - Large raw datasets should stay out of version control; the `.gitignore` excludes common artifacts.
 - `.env.example` is a safe template checked into Git so collaborators know which variables to set.
   Copy it to `.env` locally (which is ignored by Git) and fill in your real subscription, resource
