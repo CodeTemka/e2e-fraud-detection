@@ -10,6 +10,11 @@ from fraud_detection.training.submit_xgb import (
     create_xgb_sweep_job,
     xgb_sweep_job_builder,
 )
+from fraud_detection.training.submit_lgbm import (
+    LGBMSweepConfig,
+    create_lgbm_sweep_job,
+    lgbm_sweep_job_builder,
+)
 
 runner = CliRunner()
 
@@ -97,9 +102,9 @@ def test_create_automl_job_uses_settings_compute(monkeypatch):
 def test_xgb_sweep_job_builder_uses_settings(monkeypatch):
     class FakeSettings:
         training_compute = "cpu-cluster"
-        xgb_sweep_exp = "xgb-exp"
         xgb_env_name = "xgb-env"
         xgb_env_version = "1"
+        custom_train_exp = "xgb-exp"
 
         def get_training_compute(self):
             return self.training_compute
@@ -130,3 +135,40 @@ def test_create_xgb_sweep_job_builds_expected_job():
     assert job.experiment_name == "xgb-exp"
     assert job.compute == "cpu-cluster"
     assert job.objective.primary_metric == "average_precision"
+
+
+def test_lgbm_sweep_job_builder_uses_settings(monkeypatch):
+    class FakeSettings:
+        training_compute = "cpu-cluster"
+        lgbm_env_name = "lgbm-env"
+        lgbm_env_version = "2"
+        custom_train_exp = "lgbm-exp"
+
+        def get_training_compute(self):
+            return self.training_compute
+
+    config = lgbm_sweep_job_builder(
+        training_data="azureml:demo:1",
+        metric="average_precision",
+        settings=FakeSettings(),
+    )
+
+    assert config.experiment_name == "lgbm-exp"
+    assert config.compute == "cpu-cluster"
+    assert config.environment_name == "lgbm-env"
+    assert config.environment_version == "2"
+
+
+def test_create_lgbm_sweep_job_builds_expected_job():
+    config = LGBMSweepConfig(
+        experiment_name="lgbm-exp",
+        training_data="azureml:demo:1",
+        compute="cpu-cluster",
+        environment_name="lgbm-env",
+        environment_version="2",
+    )
+
+    job = create_lgbm_sweep_job(config, environment="lgbm-env:2")
+
+    assert job.experiment_name == "lgbm-exp"
+    assert job.compute == "cpu-cluster"

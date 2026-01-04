@@ -96,6 +96,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("XGB_ENV_VERSION"),
     )
 
+    # LightGBM sweep environment
+    lgbm_env_name: str = Field(
+        default="lgbm-sweep-env",
+        validation_alias=AliasChoices("LGBM_ENV_NAME"),
+    )
+    lgbm_env_version: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LGBM_ENV_VERSION"),
+    )
+
     # Default endpoint
     endpoint_name: str = "fraud-detection"
 
