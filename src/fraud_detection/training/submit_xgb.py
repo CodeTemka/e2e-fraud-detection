@@ -48,10 +48,9 @@ class XGBSweepConfig:
     training_data: str
 
     compute: str | None
+    environment_name: str 
     label_column: str = "Class"
     primary_metric: str = 'metrics.average_precision_score_macro'
-
-    environment_name: str 
     environment_version: str | None = None
     environment_file: Path = field(
         default_factory=lambda: ROOT_DIR / "src" / "fraud_detection" / "training" / "xgb_env.yaml"
