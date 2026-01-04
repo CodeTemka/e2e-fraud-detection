@@ -57,12 +57,20 @@ def main() -> None:
     if args.label_col not in original_df.columns:
         raise ValueError(f"label_col '{args.label_col}' not found. Columns: {list(original_df.columns)[:30]} ...")
 
+    required_columns = {args.label_col, "Amount", "Time"}
+    missing_columns = required_columns.difference(original_df.columns)
+    if missing_columns:
+        raise ValueError(
+            f"Missing required columns: {sorted(missing_columns)}. "
+            f"Available columns: {list(original_df.columns)[:30]} ..."
+        )
+
     rob_scaler = RobustScaler()
-    
+
     scaled_df = original_df.copy()
-    scaled_df['scaled_amount'] = rob_scaler.fit_transform(scaled_df['Amount'])
-    scaled_df['scaled_time'] = rob_scaler.fit_transform(scaled_df['Time'].values.reshape(-1, 1))
-    scaled_df.drop(['Time', 'Amount'], axis=1, inplace=True)
+    scaled_df["scaled_amount"] = rob_scaler.fit_transform(scaled_df["Amount"].values.reshape(-1, 1))
+    scaled_df["scaled_time"] = rob_scaler.fit_transform(scaled_df["Time"].values.reshape(-1, 1))
+    scaled_df.drop(["Time", "Amount"], axis=1, inplace=True)
 
     y = scaled_df[args.label_col].astype(int)
     X = scaled_df.drop(columns=[args.label_col])
@@ -80,7 +88,7 @@ def main() -> None:
     )
 
     n_pos = int(y_train.sum())
-    n_neg = int((y_train==0).sum())
+    n_neg = int((y_train == 0).sum())
     scale_pos_weight = n_neg / max(n_pos, 1)
 
     model = XGBClassifier(
@@ -115,7 +123,7 @@ def main() -> None:
             "min_child_weight": args.min_child_weight,
             "gamma": args.gamma,
             "reg_lambda": args.reg_lambda,
-            "scale_pos_weight": args.scale_pos_weight,
+            "scale_pos_weight": scale_pos_weight,
         }
     )
 
@@ -133,12 +141,13 @@ def main() -> None:
 
     # IMPORTANT: primary_metric must match the string you set in sweep_job.primary_metric. :contentReference[oaicite:2]{index=2}
     # Logging the metric the same as the AUTOML_DEFAULT_METRICS, which will help later for choosing between custom train and automl train.
-    average_precision_metric_name = 'metrics.average_precision_score_macro'
-    roc_auc_metric_name = 'metrics.AUC_macro'
-    if [average_precision_metric_name, roc_auc_metric_name] in AUTOML_DEFAULT_METRICS:
-        pass
-    else:
-        raise ValueError('log metric name must match the name in AUTOML_DEFAULT_METRICS')
+    average_precision_metric_name = "metrics.average_precision_score_macro"
+    roc_auc_metric_name = "metrics.AUC_macro"
+    if not all(
+        metric_name in AUTOML_DEFAULT_METRICS
+        for metric_name in (average_precision_metric_name, roc_auc_metric_name)
+    ):
+        raise ValueError("log metric name must match the name in AUTOML_DEFAULT_METRICS")
     mlflow.log_metric(average_precision_metric_name, ap)
     mlflow.log_metric(roc_auc_metric_name, auc)
 
