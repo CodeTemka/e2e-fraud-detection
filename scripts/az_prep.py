@@ -3,7 +3,6 @@
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Workspace
@@ -70,8 +69,7 @@ def main():
         resource_group = settings.resource_group
         sp_name = "e2e-fraud-detection-sp"
         role = "Contributor"
-        output_dir = Path("json")
-        output_file = output_dir / "sp_credentials.json"
+        output_file = "sp_credentials.json"
 
         def sp_exists(sp_name):
             cmd = [
@@ -97,7 +95,6 @@ def main():
             "--sdk-auth",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        output_dir.mkdir(parents=True, exist_ok=True)
         # Save SP credentials to JSON
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(result.stdout)
@@ -110,7 +107,7 @@ def main():
         if not service_principal_create():
             raise RuntimeError("Failed to create service principal.")
 
-        sp_credentials_path = Path("json") / "sp_credentials.json"
+        sp_credentials_path = "sp_credentials.json"
         with open(sp_credentials_path, encoding="utf-8") as f:
             sp_data = json.load(f)
 
