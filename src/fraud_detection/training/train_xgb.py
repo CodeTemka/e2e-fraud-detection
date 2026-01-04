@@ -7,9 +7,11 @@ import mlflow
 import pandas as pd
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import RobustScaler
 from xgboost import XGBClassifier
 
 from fraud_detection.utils.logging import get_logger
+from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS
 
 logger = get_logger(__name__)
 
@@ -29,9 +31,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--min_child_weight", type=float, default=1.0)
     p.add_argument("--gamma", type=float, default=0.0)
     p.add_argument("--reg_lambda", type=float, default=1.0)
-
-    # Imbalance helper (optional)
-    p.add_argument("--scale_pos_weight", type=float, default=1.0)
 
     # Training controls
     p.add_argument("--test_size", type=float, default=0.2)
@@ -54,24 +53,35 @@ def main() -> None:
         "Loading training data",
         extra={"train_data": args.train_data, "label_col": args.label_col},
     )
-    df = pd.read_csv(args.train_data)
-    if args.label_col not in df.columns:
-        raise ValueError(f"label_col '{args.label_col}' not found. Columns: {list(df.columns)[:30]} ...")
+    original_df = pd.read_csv(args.train_data)
+    if args.label_col not in original_df.columns:
+        raise ValueError(f"label_col '{args.label_col}' not found. Columns: {list(original_df.columns)[:30]} ...")
 
-    y = df[args.label_col].astype(int).to_numpy()
-    X = df.drop(columns=[args.label_col]).to_numpy()
+    rob_scaler = RobustScaler()
+    
+    scaled_df = original_df.copy()
+    scaled_df['scaled_amount'] = rob_scaler.fit_transform(scaled_df['Amount'])
+    scaled_df['scaled_time'] = rob_scaler.fit_transform(scaled_df['Time'].values.reshape(-1, 1))
+    scaled_df.drop(['Time', 'Amount'], axis=1, inplace=True)
+
+    y = scaled_df[args.label_col].astype(int)
+    X = scaled_df.drop(columns=[args.label_col])
 
     # Split: train vs test, then train -> train/val
-    X_train, X_test, y_train, y_test = train_test_split(
+    X_trainval, X_test, y_trainval, y_test = train_test_split(
         X, y, test_size=args.test_size, stratify=y, random_state=args.random_state
     )
     X_train, X_val, y_train, y_val = train_test_split(
-        X_train,
-        y_train,
+        X_trainval,
+        y_trainval,
         test_size=args.val_size,
-        stratify=y_train,
+        stratify=y_trainval,
         random_state=args.random_state,
     )
+
+    n_pos = int(y_train.sum())
+    n_neg = int((y_train==0).sum())
+    scale_pos_weight = n_neg / max(n_pos, 1)
 
     model = XGBClassifier(
         n_estimators=args.n_estimators,
@@ -82,7 +92,7 @@ def main() -> None:
         min_child_weight=args.min_child_weight,
         gamma=args.gamma,
         reg_lambda=args.reg_lambda,
-        scale_pos_weight=args.scale_pos_weight,
+        scale_pos_weight=scale_pos_weight,
         objective="binary:logistic",
         eval_metric="aucpr",  # internal eval metric; we'll still log sklearn metrics explicitly
         tree_method="hist",
@@ -122,8 +132,15 @@ def main() -> None:
     auc = float(roc_auc_score(y_test, proba_test))
 
     # IMPORTANT: primary_metric must match the string you set in sweep_job.primary_metric. :contentReference[oaicite:2]{index=2}
-    mlflow.log_metric("average_precision", ap)
-    mlflow.log_metric("roc_auc", auc)
+    # Logging the metric the same as the AUTOML_DEFAULT_METRICS, which will help later for choosing between custom train and automl train.
+    average_precision_metric_name = 'metrics.average_precision_score_macro'
+    roc_auc_metric_name = 'metrics.AUC_macro'
+    if [average_precision_metric_name, roc_auc_metric_name] in AUTOML_DEFAULT_METRICS:
+        pass
+    else:
+        raise ValueError('log metric name must match the name in AUTOML_DEFAULT_METRICS')
+    mlflow.log_metric(average_precision_metric_name, ap)
+    mlflow.log_metric(roc_auc_metric_name, auc)
 
     # Save model artifact
     out_dir = Path(args.output_dir)

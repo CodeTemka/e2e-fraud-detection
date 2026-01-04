@@ -7,7 +7,7 @@ from typing import Any
 from azure.ai.ml import Input, MLClient, Output, command
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Environment
-from azure.ai.ml.sweep import Choice, LogUniform, MedianStoppingPolicy, Uniform
+from azure.ai.ml.sweep import Choice, LogUniform, MedianStoppingPolicy, Uniform, RandomSamplingAlgorithm, SamplingAlgorithm
 
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import ROOT_DIR, Settings, get_settings
@@ -15,8 +15,7 @@ from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-SUPPORTED_XGB_METRICS = {"average_precision", "roc_auc"}
-
+SUPPORTED_XGB_METRICS = {'metrics.average_precision_score_macro', 'metrics.AUC_macro'}
 
 def _metric_check(metric: str) -> str:
     metric_str = (metric or "").strip().replace("-", "_")
@@ -45,14 +44,14 @@ def _resolve_data_input(training_data: str) -> Input:
 
 @dataclass
 class XGBSweepConfig:
-    experiment_name: str
+    experiment_name: str 
     training_data: str
 
     compute: str | None
     label_column: str = "Class"
-    primary_metric: str = "average_precision"
+    primary_metric: str = 'metrics.average_precision_score_macro'
 
-    environment_name: str = "xgb-sweep-env"
+    environment_name: str 
     environment_version: str | None = None
     environment_file: Path = field(
         default_factory=lambda: ROOT_DIR / "src" / "fraud_detection" / "training" / "xgb_env.yaml"
@@ -62,7 +61,7 @@ class XGBSweepConfig:
     max_total_trials: int = 30
     max_concurrent_trials: int = 4
     timeout_minutes: int = 180
-    sampling_algorithm: str = "random"
+    sampling_algorithm: SamplingAlgorithm = RandomSamplingAlgorithm(seed=999, rule="sobol", logbase="e")
 
     early_stopping_delay: int = 5
     early_stopping_interval: int = 2
@@ -73,7 +72,7 @@ class XGBSweepConfig:
 def xgb_sweep_job_builder(
     *,
     training_data: str,
-    metric: str = "average_precision",
+    metric: str = 'metrics.average_precision_score_macro',
     compute: str | None = None,
     settings: Settings | None = None,
 ) -> XGBSweepConfig:
@@ -81,7 +80,7 @@ def xgb_sweep_job_builder(
     resolved_settings = settings or get_settings()
     compute_target = (compute or "").strip() or resolved_settings.get_training_compute()
     return XGBSweepConfig(
-        experiment_name=resolved_settings.xgb_sweep_exp,
+        experiment_name=resolved_settings.custom_train_exp,
         training_data=training_data,
         compute=compute_target,
         label_column="Class",
@@ -133,7 +132,6 @@ def create_xgb_sweep_job(config: XGBSweepConfig, *, environment: str) -> Any:
             "--min_child_weight ${{inputs.min_child_weight}} "
             "--gamma ${{inputs.gamma}} "
             "--reg_lambda ${{inputs.reg_lambda}} "
-            "--scale_pos_weight ${{inputs.scale_pos_weight}} "
             "--output_dir ${{outputs.output_dir}}"
         ),
         inputs={
@@ -147,7 +145,6 @@ def create_xgb_sweep_job(config: XGBSweepConfig, *, environment: str) -> Any:
             "min_child_weight": 1.0,
             "gamma": 0.0,
             "reg_lambda": 1.0,
-            "scale_pos_weight": 1.0,
         },
         outputs={"output_dir": Output(type=AssetTypes.URI_FOLDER)},
         environment=environment,
@@ -166,7 +163,6 @@ def create_xgb_sweep_job(config: XGBSweepConfig, *, environment: str) -> Any:
         min_child_weight=Choice(values=[1.0, 5.0, 10.0]),
         gamma=Uniform(min_value=0.0, max_value=5.0),
         reg_lambda=LogUniform(min_value=1e-3, max_value=10.0),
-        scale_pos_weight=Choice(values=[1.0, 50.0, 100.0, 200.0]),
     )
 
     sweep_job = job_for_sweep.sweep(

@@ -250,7 +250,7 @@ def submit_xgb_sweep(
             help=f"Primary metric for the sweep (choices: {sorted(SUPPORTED_XGB_METRICS)}).",
             case_sensitive=False,
         ),
-    ] = "average_precision",
+    ] = 'metrics.average_precision_score_macro',
     compute: Annotated[
         str | None,
         typer.Option("--compute", help="Azure ML compute cluster name for training (optional override)."),

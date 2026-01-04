@@ -67,13 +67,11 @@ class Settings(BaseSettings):
     # Default experiments
     custom_train_exp: str = "custom-train"
     automl_train_exp: str = "automl-train"
-    xgb_sweep_exp: str = "xgb-sweep"
 
     # Default compute
     training_compute: str = Field(
         default="cpu-cluster",
         validation_alias=AliasChoices(
-            "TRAINING_COMPUTE",
             "AML_COMPUTE_TRAIN",
             "AML_COMPUTE",
             "COMPUTE_CLUSTER",
