@@ -31,6 +31,7 @@ from fraud_detection.training.automl import (
     create_automl_job,
     submit_job,
 )
+from fraud_detection.training.compute import ensure_training_compute
 from fraud_detection.training.submit_xgb import (
     SUPPORTED_XGB_METRICS,
     create_xgb_sweep_job,
@@ -38,7 +39,6 @@ from fraud_detection.training.submit_xgb import (
     submit_xgb_sweep_job,
     xgb_sweep_job_builder,
 )
-from fraud_detection.training.compute import ensure_training_compute
 from fraud_detection.utils.logging import get_logger
 
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")

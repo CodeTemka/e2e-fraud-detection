@@ -5,7 +5,11 @@ from typer.testing import CliRunner
 from fraud_detection import cli
 from fraud_detection.registry.automl_registry import list_completed_jobs
 from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
-from fraud_detection.training.submit_xgb import XGBSweepConfig, create_xgb_sweep_job, xgb_sweep_job_builder
+from fraud_detection.training.submit_xgb import (
+    XGBSweepConfig,
+    create_xgb_sweep_job,
+    xgb_sweep_job_builder,
+)
 
 runner = CliRunner()
 
