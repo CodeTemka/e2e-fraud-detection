@@ -10,7 +10,7 @@ from azure.ai.ml.entities import Model
 from azure.core.exceptions import ResourceNotFoundError
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import Settings, get_settings
+from fraud_detection.config import ROOT_DIR, Settings, get_settings
 from fraud_detection.data.data_validation import (
     DEFAULT_CLASS_RATIO_BOUNDS,
     DataValidationError,
@@ -22,8 +22,9 @@ from fraud_detection.registry.automl_registry import (
     register_best_child_run,
 )
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS_BARE
+from fraud_detection.registry.custom_model_registry import register_best_custom_model as register_custom_model
 from fraud_detection.registry.prod_model_by_metric import register_prod_model
-from fraud_detection.serving.deploy import deploy_model
+from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
 from fraud_detection.serving.online_endpoint import create_endpoint, delete_endpoint
 from fraud_detection.training.automl import (
     SUPPORTED_CLASSIFICATION_METRICS,
@@ -449,11 +450,45 @@ def register_best_custom_model(
     experiment = settings.custom_train_exp
 
     try:
-        model_name = register_prod_model(metric=metric, ml_client=ml_client, settings=settings, experiment=experiment)
+        result = register_custom_model(
+            metric=metric,
+            ml_client=ml_client,
+            settings=settings,
+            experiment=experiment,
+        )
     except (RuntimeError, ValueError, KeyError) as exc:
         logger.error("Couldn't register production model", extra={"error": str(exc)})
         raise typer.Exit(code=1) from exc
-    typer.echo(f"Registered model '{model_name}' based on metric '{metric}'.")
+
+    if not result.promoted:
+        typer.echo(
+            "Best custom model did not exceed production metrics; no promotion performed."
+        )
+        return
+
+    env_id = resolve_scoring_environment(ml_client, settings=settings)
+    deployment = deploy_model(
+        ml_client,
+        endpoint_name=settings.endpoint_name,
+        deployment_name=settings.deployment_name,
+        model_name=result.model_name,
+        model_version=result.model_version,
+        instance_type=settings.get_deployment_instance_type(),
+        instance_count=settings.instance_count,
+        code_path=str(ROOT_DIR / "src"),
+        scoring_script="fraud_detection/serving/custom_scoring.py",
+        environment=env_id,
+        environment_variables={"ALERT_CAP": str(settings.default_alert_cap)},
+        tags={
+            "project": "fraud-detection",
+            "model_source": "custom",
+            "metric": metric,
+        },
+    )
+    typer.echo(
+        f"Promoted model '{result.model_name}' version '{result.model_version}' "
+        f"and deployed to endpoint '{deployment.endpoint_name}' ({deployment.name})."
+    )
 
 
 

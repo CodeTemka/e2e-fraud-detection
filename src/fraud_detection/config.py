@@ -106,11 +106,34 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LGBM_ENV_VERSION"),
     )
 
+    # Scoring environment (online endpoints)
+    scoring_env_name: str = Field(
+        default="fraud-scoring-env",
+        validation_alias=AliasChoices("SCORING_ENV_NAME"),
+    )
+    scoring_env_version: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SCORING_ENV_VERSION"),
+    )
+    scoring_env_file: Path = ROOT_DIR / "src" / "fraud_detection" / "serving" / "scoring_env.yaml"
+
     # Default endpoint
     endpoint_name: str = "fraud-detection"
 
     # Default deployment
     deployment_name: str = "blue"
+
+    # Alert capacity defaults for scoring
+    default_alert_cap: int = Field(
+        default=100,
+        validation_alias=AliasChoices("DEFAULT_ALERT_CAP"),
+    )
+
+    # Promotion config
+    promotion_metric_epsilon: float = Field(
+        default=1e-6,
+        validation_alias=AliasChoices("PROMOTION_METRIC_EPSILON"),
+    )
 
     # Default smoke test json
     smoke_test: Path = ROOT_DIR / "sample_request.json"

@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from azure.ai.ml import MLClient
-from azure.ai.ml.entities import ManagedOnlineDeployment
+from azure.ai.ml.entities import CodeConfiguration, Environment, ManagedOnlineDeployment
 from azure.core.exceptions import ResourceNotFoundError
 
 from fraud_detection.config import get_settings
@@ -34,6 +34,25 @@ def _get_latest_model_version(ml_client: MLClient, model_name: str) -> str:
     return str(version)
 
 
+def resolve_scoring_environment(ml_client: MLClient, *, settings=None) -> str:
+    resolved_settings = settings or get_settings()
+    if resolved_settings.scoring_env_version:
+        return f"{resolved_settings.scoring_env_name}:{resolved_settings.scoring_env_version}"
+
+    env_path = resolved_settings.scoring_env_file
+    if not env_path.exists():
+        raise FileNotFoundError(f"Scoring environment file not found: {env_path}")
+
+    env = Environment(
+        name=resolved_settings.scoring_env_name,
+        description="Fraud detection scoring environment",
+        conda_file=str(env_path),
+        image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest",
+    )
+    created = ml_client.environments.create_or_update(env)
+    return f"{created.name}:{created.version}"
+
+
 def deploy_model(
     ml_client: MLClient,
     *,
@@ -43,6 +62,10 @@ def deploy_model(
     model_version: str | None = None,
     instance_type: str | None = "Standard_D2a_v4",
     instance_count: int = 1,
+    code_path: str | None = None,
+    scoring_script: str | None = None,
+    environment: str | Environment | None = None,
+    environment_variables: Mapping[str, str] | None = None,
     tags: Mapping[str, str] | None = None,
 ) -> ManagedOnlineDeployment:
     """Deploy a registered model to an existing managed online endpoint."""
@@ -55,12 +78,19 @@ def deploy_model(
     resolved_version = (model_version or "").strip() or _get_latest_model_version(ml_client, model_name)
     model = ml_client.models.get(name=model_name, version=resolved_version)
 
+    code_configuration = None
+    if code_path and scoring_script:
+        code_configuration = CodeConfiguration(code=code_path, scoring_script=scoring_script)
+
     deployment = ManagedOnlineDeployment(
         name=deployment_name,
         endpoint_name=endpoint_name,
         model=model,
         instance_type=resolved_instance_type,
         instance_count=instance_count,
+        code_configuration=code_configuration,
+        environment=environment,
+        environment_variables=dict(environment_variables) if environment_variables else None,
         tags=dict(tags) if tags else {"project": "fraud-detection"},
     )
 
@@ -73,10 +103,11 @@ def deploy_model(
             "model_version": resolved_version,
             "instance_type": resolved_instance_type,
             "instance_count": instance_count,
+            "scoring_script": scoring_script,
         },
     )
 
     return ml_client.online_deployments.begin_create_or_update(deployment).result()
 
 
-__all__ = ["deploy_model"]
+__all__ = ["deploy_model", "resolve_scoring_environment"]

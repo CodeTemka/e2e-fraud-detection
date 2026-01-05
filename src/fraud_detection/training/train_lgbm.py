@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import mlflow
 import pandas as pd
 from lightgbm import LGBMClassifier
+from joblib import dump
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler
@@ -66,11 +68,12 @@ def main() -> None:
             f"Available columns: {list(original_df.columns)[:30]} ..."
         )
 
-    rob_scaler = RobustScaler()
+    amount_scaler = RobustScaler()
+    time_scaler = RobustScaler()
 
     scaled_df = original_df.copy()
-    scaled_df["scaled_amount"] = rob_scaler.fit_transform(scaled_df["Amount"].values.reshape(-1, 1))
-    scaled_df["scaled_time"] = rob_scaler.fit_transform(scaled_df["Time"].values.reshape(-1, 1))
+    scaled_df["scaled_amount"] = amount_scaler.fit_transform(scaled_df["Amount"].values.reshape(-1, 1))
+    scaled_df["scaled_time"] = time_scaler.fit_transform(scaled_df["Time"].values.reshape(-1, 1))
     scaled_df.drop(["Time", "Amount"], axis=1, inplace=True)
 
     y = scaled_df[args.label_col].astype(int)
@@ -151,13 +154,29 @@ def main() -> None:
     mlflow.log_metric(average_precision_metric_name, ap)
     mlflow.log_metric(roc_auc_metric_name, auc)
 
-    # Save model artifact
+    # Save model artifact + preprocessing assets
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = out_dir / "model.txt"
+    artifacts_dir = out_dir / "model"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = artifacts_dir / "model.txt"
     model.booster_.save_model(str(model_path))
-    mlflow.log_artifact(str(model_path))
+
+    dump(amount_scaler, artifacts_dir / "scaler_amount.pkl")
+    dump(time_scaler, artifacts_dir / "scaler_time.pkl")
+
+    metadata = {
+        "model_type": "lightgbm",
+        "label_column": args.label_col,
+        "raw_feature_columns": [c for c in original_df.columns if c != args.label_col],
+        "feature_columns": list(X.columns),
+    }
+    metadata_path = artifacts_dir / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2))
+
+    mlflow.log_artifacts(str(artifacts_dir), artifact_path="model")
 
     mlflow.end_run()
 
