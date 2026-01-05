@@ -45,12 +45,12 @@ pip freeze > requirements.lock
 ```
 
 ## Usage
-Ensure must resources for azure service:
+Prepare required resources for Azure ML:
 ```bash
-python srcipts/az_prep.py
+python scripts/az_prep.py
 ```
 
-Ensure must github secret is created:
+Ensure the required GitHub secret exists:
 ```bash
 python scripts/git_add_secret.py
 ```
@@ -113,6 +113,17 @@ Create an online endpoint, deploy the production model, and invoke it:
 fraud-cli endpoint-create
 fraud-cli deploy
 fraud-cli serve-invoke
+```
+
+## Local quickstart (no Azure)
+Train an XGBoost model locally using the sample CSV:
+```bash
+python src/fraud_detection/training/train_xgb.py --train_data data/creditcard.csv
+```
+
+## One-command test run
+```bash
+pytest
 ```
 
 ## Testing & Linting
