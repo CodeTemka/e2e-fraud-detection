@@ -32,8 +32,16 @@ conda activate fraud-detection
 cp .env.example .env
 # edit the values for your credentials
 
-# 3) Install the project (already handled by the env file, but works standalone too)
+# 3) Install pinned dependencies (CI/reproducible installs)
+pip install -r requirements.lock
+
+# 4) Install the project (already handled by the env file, but works standalone too)
 pip install -e .[dev]
+```
+
+To refresh the lockfile after updating dependencies, install the desired versions and run:
+```bash
+pip freeze > requirements.lock
 ```
 
 ## Usage
