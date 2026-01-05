@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 
 import mlflow
+import numpy as np
 import pandas as pd
 from joblib import dump
 from lightgbm import LGBMClassifier
@@ -51,6 +53,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    np.random.seed(args.random_state)
+    random.seed(args.random_state)
 
     logger.info(
         "Loading training data",
@@ -126,6 +131,7 @@ def main() -> None:
             "min_child_weight": args.min_child_weight,
             "reg_lambda": args.reg_lambda,
             "scale_pos_weight": scale_pos_weight,
+            "random_state": args.random_state,
         }
     )
 
