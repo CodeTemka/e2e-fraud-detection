@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 
 import mlflow
+import numpy as np
 import pandas as pd
 from joblib import dump
 from sklearn.metrics import average_precision_score, roc_auc_score
@@ -50,6 +52,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    np.random.seed(args.random_state)
+    random.seed(args.random_state)
 
     logger.info(
         "Loading training data",
@@ -127,6 +132,7 @@ def main() -> None:
             "gamma": args.gamma,
             "reg_lambda": args.reg_lambda,
             "scale_pos_weight": scale_pos_weight,
+            "random_state": args.random_state,
         }
     )
 
