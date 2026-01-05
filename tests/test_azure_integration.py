@@ -4,8 +4,7 @@ from types import SimpleNamespace
 import pytest
 from azure.ai.ml.constants import AssetTypes
 
-from fraud_detection.training import automl
-from fraud_detection.training import submit_lgbm, submit_xgb
+from fraud_detection.training import automl, submit_lgbm, submit_xgb
 
 REQUIRED_AZURE_ENV_VARS = (
     "AZURE_SUBSCRIPTION_ID",

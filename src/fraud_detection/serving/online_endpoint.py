@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from math import floor
 from dataclasses import dataclass
+from math import floor
 
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import ManagedOnlineEndpoint
