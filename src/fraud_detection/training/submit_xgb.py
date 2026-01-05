@@ -7,7 +7,14 @@ from typing import Any
 from azure.ai.ml import Input, MLClient, Output, command
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Environment
-from azure.ai.ml.sweep import Choice, LogUniform, MedianStoppingPolicy, Uniform, RandomSamplingAlgorithm, SamplingAlgorithm
+from azure.ai.ml.sweep import (
+    Choice,
+    LogUniform,
+    MedianStoppingPolicy,
+    RandomSamplingAlgorithm,
+    SamplingAlgorithm,
+    Uniform,
+)
 
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import ROOT_DIR, Settings, get_settings

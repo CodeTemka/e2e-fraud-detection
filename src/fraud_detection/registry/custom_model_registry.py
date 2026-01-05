@@ -9,7 +9,7 @@ from azure.core.exceptions import HttpResponseError
 
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import Settings, get_settings
-from fraud_detection.registry.automl_registry import mlflow_tracking_uri, _job_artifact_uri
+from fraud_detection.registry.automl_registry import _job_artifact_uri, mlflow_tracking_uri
 from fraud_detection.registry.best_runs_by_metric import BestRun, best_run_by_metric
 from fraud_detection.registry.prod_model_by_metric import current_prod_model_metric
 from fraud_detection.utils.logging import get_logger

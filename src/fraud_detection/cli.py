@@ -22,8 +22,12 @@ from fraud_detection.registry.automl_registry import (
     register_best_child_run,
 )
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS_BARE
-from fraud_detection.registry.custom_model_registry import register_best_custom_model as register_custom_model
-from fraud_detection.registry.model_competition import select_and_register_prod_model as select_prod_model
+from fraud_detection.registry.custom_model_registry import (
+    register_best_custom_model as register_custom_model,
+)
+from fraud_detection.registry.model_competition import (
+    select_and_register_prod_model as select_prod_model,
+)
 from fraud_detection.registry.prod_model_by_metric import register_prod_model
 from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
 from fraud_detection.serving.online_endpoint import create_endpoint, delete_endpoint
@@ -34,19 +38,19 @@ from fraud_detection.training.automl import (
     submit_job,
 )
 from fraud_detection.training.compute import ensure_training_compute
+from fraud_detection.training.submit_lgbm import (
+    SUPPORTED_LGBM_METRICS,
+    create_lgbm_sweep_job,
+    lgbm_sweep_job_builder,
+    resolve_lgbm_environment,
+    submit_lgbm_sweep_job,
+)
 from fraud_detection.training.submit_xgb import (
     SUPPORTED_XGB_METRICS,
     create_xgb_sweep_job,
     resolve_xgb_environment,
     submit_xgb_sweep_job,
     xgb_sweep_job_builder,
-)
-from fraud_detection.training.submit_lgbm import (
-    SUPPORTED_LGBM_METRICS,
-    create_lgbm_sweep_job,
-    resolve_lgbm_environment,
-    submit_lgbm_sweep_job,
-    lgbm_sweep_job_builder,
 )
 from fraud_detection.utils.logging import get_logger
 

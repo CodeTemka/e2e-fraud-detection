@@ -12,8 +12,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler
 from xgboost import XGBClassifier
 
-from fraud_detection.utils.logging import get_logger
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS
+from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

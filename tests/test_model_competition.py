@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from fraud_detection.registry.best_runs_by_metric import BestRun
 from fraud_detection.registry import model_competition
+from fraud_detection.registry.best_runs_by_metric import BestRun
 
 
 def test_select_and_register_promotes_custom(monkeypatch):

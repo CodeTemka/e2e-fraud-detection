@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-import pytest
-
 from fraud_detection.registry import custom_model_registry as custom_registry
 from fraud_detection.registry.best_runs_by_metric import BestRun
 
