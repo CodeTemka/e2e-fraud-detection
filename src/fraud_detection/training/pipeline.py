@@ -13,7 +13,7 @@ from azure.ai.ml.entities import Environment, Model
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import ROOT_DIR, Settings, get_settings
 from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
-from fraud_detection.serving.online_endpoint import ensure_endpoint
+from fraud_detection.serving.online_endpoint import ensure_endpoint, set_initial_traffic
 from fraud_detection.training.submit_xgb import resolve_xgb_environment, xgb_sweep_job_builder
 from fraud_detection.utils.logging import get_logger
 
@@ -290,6 +290,16 @@ def deploy_model_entrypoint(args: argparse.Namespace) -> None:
             "model_name": model_name,
             "model_version": model_version,
         },
+    )
+
+    traffic = set_initial_traffic(
+        ml_client,
+        endpoint_name=endpoint_name,
+        deployment_name=deployment_name,
+    )
+    logger.info(
+        "Set initial traffic for deployment",
+        extra={"endpoint_name": endpoint_name, "traffic": traffic},
     )
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from math import floor
 from dataclasses import dataclass
 
 from azure.ai.ml import MLClient
@@ -89,6 +90,73 @@ def update_traffic(ml_client: MLClient, *, endpoint_name: str, traffic: dict[str
     ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 
 
+def set_initial_traffic(
+    ml_client: MLClient,
+    *,
+    endpoint_name: str,
+    deployment_name: str,
+    low_traffic_percent: int = 10,
+) -> dict[str, int]:
+    """Set initial low traffic for a new deployment and return the final mapping."""
+    if low_traffic_percent <= 0 or low_traffic_percent >= 100:
+        raise ValueError("low_traffic_percent must be between 1 and 99")
+
+    endpoint = ml_client.online_endpoints.get(endpoint_name)
+    current_traffic = dict(endpoint.traffic or {})
+    traffic = _build_initial_traffic(
+        current_traffic=current_traffic,
+        deployment_name=deployment_name,
+        low_traffic_percent=low_traffic_percent,
+    )
+    update_traffic(ml_client, endpoint_name=endpoint_name, traffic=traffic)
+    return traffic
+
+
+def _build_initial_traffic(
+    *,
+    current_traffic: Mapping[str, int],
+    deployment_name: str,
+    low_traffic_percent: int,
+) -> dict[str, int]:
+    remaining = 100 - low_traffic_percent
+    existing = {name: pct for name, pct in current_traffic.items() if name != deployment_name}
+    if not existing:
+        return {deployment_name: 100}
+
+    total_existing = sum(existing.values())
+    traffic = _allocate_remaining_traffic(existing=existing, remaining=remaining, total_existing=total_existing)
+    traffic[deployment_name] = low_traffic_percent
+    return traffic
+
+
+def _allocate_remaining_traffic(
+    *,
+    existing: Mapping[str, int],
+    remaining: int,
+    total_existing: int,
+) -> dict[str, int]:
+    if total_existing <= 0:
+        base = remaining // len(existing)
+        traffic = {name: base for name in existing}
+        remainder = remaining - base * len(existing)
+        for name in sorted(existing)[:remainder]:
+            traffic[name] += 1
+        return traffic
+
+    allocations: list[tuple[str, int, float]] = []
+    for name, pct in existing.items():
+        raw = pct * remaining / total_existing
+        base = floor(raw)
+        allocations.append((name, base, raw - base))
+
+    traffic = {name: base for name, base, _ in allocations}
+    remainder = remaining - sum(base for _, base, _ in allocations)
+    allocations.sort(key=lambda item: (-item[2], item[0]))
+    for name, _, _ in allocations[:remainder]:
+        traffic[name] += 1
+    return traffic
+
+
 def _validate_traffic(traffic: dict[str, int]) -> None:
     if not traffic:
         raise ValueError("traffic mapping is empty")
@@ -113,5 +181,6 @@ __all__ = [
     "ensure_endpoint",
     "delete_endpoint",
     "update_traffic",
+    "set_initial_traffic",
     "DEFAULT_AUTH_MODE",
 ]

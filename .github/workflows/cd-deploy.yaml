@@ -72,3 +72,39 @@ jobs:
       - name: Submit Azure ML training pipeline
         run: |
           python -m fraud_detection.training.pipeline submit
+
+      - name: Smoke test online endpoint
+        id: smoke_test
+        continue-on-error: true
+        run: |
+          python -m fraud_detection.cli serve-invoke
+
+      - name: Roll back traffic if smoke test fails
+        if: steps.smoke_test.outcome == 'failure'
+        run: |
+          python - <<'PY'
+          from fraud_detection.azure.client import get_ml_client
+          from fraud_detection.config import get_settings
+          from fraud_detection.serving.online_endpoint import update_traffic
+
+          settings = get_settings()
+          ml_client = get_ml_client(settings=settings)
+          endpoint = ml_client.online_endpoints.get(settings.endpoint_name)
+          traffic = dict(endpoint.traffic or {})
+          failed_deployment = settings.deployment_name
+          rollback_candidates = {
+              name: pct for name, pct in traffic.items() if name != failed_deployment
+          }
+          if not rollback_candidates:
+              raise SystemExit("No rollback candidate found in endpoint traffic map.")
+
+          stable_deployment = max(rollback_candidates, key=rollback_candidates.get)
+          update_traffic(
+              ml_client,
+              endpoint_name=settings.endpoint_name,
+              traffic={stable_deployment: 100},
+          )
+          raise SystemExit(
+              f"Smoke test failed; rolled back traffic to '{stable_deployment}'."
+          )
+          PY
