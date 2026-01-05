@@ -95,6 +95,7 @@ def register_prod_model(
     *,
     ml_client: MLClient | None = None,
     settings: Settings | None = None,
+    experiment: str,
 ) -> str | None:
     """
     Compare best AutoML run vs current production model.
@@ -114,8 +115,8 @@ def register_prod_model(
 
     mlflow_tracking_uri(ml_client)
 
-    # Best run in the AutoML experiment for the metric
-    best: BestRun = best_run_by_metric(metric=metric, settings=cfg)
+    # Best run in the specified experiment for the metric
+    best: BestRun = best_run_by_metric(metric=metric, settings=cfg, experiment_name=experiment)
     best_run_id = best.run_id
 
     # Current prod metric (if any)

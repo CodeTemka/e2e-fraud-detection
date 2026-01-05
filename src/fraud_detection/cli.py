@@ -392,7 +392,7 @@ def register_best_automl_model(
             help=f"Please choose from {list(AUTOML_DEFAULT_METRICS_BARE)}",
             case_sensitive=False,
         ),
-    ] = "norm_macro_recall",
+    ] = "average_precision_score_macro",
     best_child_run: Annotated[
         bool,
         typer.Option("--best-child-run", help="Register the best child run model from the AutoML parent run."),
@@ -428,11 +428,32 @@ def register_best_automl_model(
 
     if best_by_metric:
         try:
-            model_name = register_prod_model(metric=metric, ml_client=ml_client, settings=settings)
+            model_name = register_prod_model(metric=metric, ml_client=ml_client, settings=settings, experiment=experiment)
         except (RuntimeError, ValueError, KeyError) as exc:
             logger.error("Couldn't register production model", extra={"error": str(exc)})
             raise typer.Exit(code=1) from exc
         typer.echo(f"Registered model '{model_name}' based on metric '{metric}'.")
+
+
+
+@app.command()
+def register_best_custom_model(
+    metric: str = typer.Option(
+        'average_precision_score_macro', "--metric", "-m",
+        help=f"Please choose from {list(AUTOML_DEFAULT_METRICS_BARE)}",
+        case_sensitive=False,)
+):
+    """Register best custom trained model by specific metric"""
+    settings = _resolve_settings()
+    ml_client = _resolve_ml_client(settings)
+    experiment = settings.custom_train_exp
+
+    try:
+        model_name = register_prod_model(metric=metric, ml_client=ml_client, settings=settings, experiment=experiment)
+    except (RuntimeError, ValueError, KeyError) as exc:
+        logger.error("Couldn't register production model", extra={"error": str(exc)})
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Registered model '{model_name}' based on metric '{metric}'.")
 
 
 
