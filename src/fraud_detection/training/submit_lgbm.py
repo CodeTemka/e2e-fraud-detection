@@ -15,11 +15,18 @@ from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-SUPPORTED_LGBM_METRICS = {"metrics.average_precision_score_macro", "metrics.AUC_macro"}
+SUPPORTED_LGBM_METRICS = {"average_precision", "AUC_macro"}
+
+METRIC_ALIASES = {
+    "metrics.average_precision_score_macro": "average_precision",
+    "average_precision_score_macro": "average_precision",
+    "metrics.AUC_macro": "AUC_macro",
+}
 
 
 def _metric_check(metric: str) -> str:
     metric_str = (metric or "").strip().replace("-", "_")
+    metric_str = METRIC_ALIASES.get(metric_str, metric_str)
     if metric_str not in SUPPORTED_LGBM_METRICS:
         allowed = ", ".join(sorted(SUPPORTED_LGBM_METRICS))
         raise ValueError(f"Unsupported metric '{metric_str}'. Choose one of: {allowed}")
@@ -51,7 +58,7 @@ class LGBMSweepConfig:
     compute: str | None
     environment_name: str
     label_column: str = "Class"
-    primary_metric: str = "metrics.average_precision_score_macro"
+    primary_metric: str = "average_precision"
     environment_version: str | None = None
     environment_file: Path = field(
         default_factory=lambda: ROOT_DIR / "src" / "fraud_detection" / "training" / "lgbm_env.yaml"
@@ -72,7 +79,7 @@ class LGBMSweepConfig:
 def lgbm_sweep_job_builder(
     *,
     training_data: str,
-    metric: str = "metrics.average_precision_score_macro",
+    metric: str = "average_precision",
     compute: str | None = None,
     settings: Settings | None = None,
 ) -> LGBMSweepConfig:

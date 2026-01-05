@@ -23,6 +23,7 @@ from fraud_detection.registry.automl_registry import (
 )
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS_BARE
 from fraud_detection.registry.custom_model_registry import register_best_custom_model as register_custom_model
+from fraud_detection.registry.model_competition import select_and_register_prod_model as select_prod_model
 from fraud_detection.registry.prod_model_by_metric import register_prod_model
 from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
 from fraud_detection.serving.online_endpoint import create_endpoint, delete_endpoint
@@ -58,6 +59,13 @@ def _resolve_settings() -> Settings:
 
 def _resolve_ml_client(settings: Settings) -> object:
     return get_ml_client(settings=settings)
+
+
+def _parse_version(v: str | None) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -493,6 +501,62 @@ def register_best_custom_model(
 
 
 @app.command()
+def select_and_register_prod_model(
+    metric: Annotated[
+        str | None,
+        typer.Option(
+            "--metric",
+            "-m",
+            help="Primary metric used for AutoML/custom competition.",
+            case_sensitive=False,
+        ),
+    ] = None,
+    output_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-file",
+            help="Optional GitHub Actions output file to write promotion results.",
+        ),
+    ] = None,
+):
+    """Select the best model across AutoML and custom runs and promote if better than production."""
+    settings = _resolve_settings()
+    ml_client = _resolve_ml_client(settings)
+    resolved_metric = metric or settings.default_metric
+
+    try:
+        result = select_prod_model(
+            metric=resolved_metric,
+            ml_client=ml_client,
+            settings=settings,
+        )
+    except (RuntimeError, ValueError, KeyError) as exc:
+        logger.error("Couldn't select/register production model", extra={"error": str(exc)})
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Best AutoML metric: {result.automl_metric}")
+    typer.echo(f"Best custom metric: {result.custom_metric}")
+    typer.echo(f"Current prod metric: {result.prod_metric}")
+
+    if result.promoted:
+        typer.echo(
+            f"Promoted {result.model_source} model '{result.model_name}' version '{result.model_version}' "
+            f"for metric '{result.metric}'."
+        )
+    else:
+        typer.echo("No change: neither candidate beat current production metrics.")
+
+    if output_file:
+        lines = [
+            f"promoted={str(result.promoted).lower()}",
+            f"model_name={result.model_name or ''}",
+            f"model_version={result.model_version or ''}",
+            f"model_source={result.model_source or ''}",
+        ]
+        with output_file.open("a", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+
+@app.command()
 def endpoint_create():
     """Create a managed online endpoint."""
     settings = _resolve_settings()
@@ -534,14 +598,40 @@ def deploy():
     endpoint_name = settings.endpoint_name
     deployment_name = settings.deployment_name
     model_name = settings.prod_model_name
+    models = list(ml_client.models.list(name=model_name))
+    if not models:
+        typer.echo(f"No registered models found for '{model_name}'.", err=True)
+        raise typer.Exit(code=1)
+    latest = max(models, key=lambda m: _parse_version(getattr(m, "version", None)))
+    model_version = str(getattr(latest, "version", "") or "")
+    model_tags = getattr(latest, "tags", {}) or {}
+    model_source = (model_tags.get("model_source") or "").lower()
+
+    deploy_kwargs = {}
+    if model_source == "custom":
+        env_id = resolve_scoring_environment(ml_client, settings=settings)
+        deploy_kwargs.update(
+            {
+                "code_path": str(ROOT_DIR / "src"),
+                "scoring_script": "fraud_detection/serving/custom_scoring.py",
+                "environment": env_id,
+                "environment_variables": {"ALERT_CAP": str(settings.default_alert_cap)},
+                "tags": {
+                    "project": "fraud-detection",
+                    "model_source": "custom",
+                },
+            }
+        )
 
     deployment = deploy_model(
         ml_client,
         endpoint_name=endpoint_name,
         deployment_name=deployment_name,
         model_name=model_name,
+        model_version=model_version or None,
         instance_type=instance_type,
         instance_count=instance_count,
+        **deploy_kwargs,
     )
     typer.echo(f"Deployed model '{model_name}' to endpoint '{endpoint_name}' as deployment '{deployment.name}'.")
 

@@ -90,20 +90,27 @@ def register_custom_model_from_run(
     metric: str,
     metric_value: float,
     settings: Settings,
+    extra_tags: dict[str, str] | None = None,
 ) -> Model:
+    tags = {
+        "experiment_name": settings.custom_train_exp,
+        "selected_metric": metric,
+        "metric_name": metric,
+        "metric_value": str(metric_value),
+        "run_id": run_id,
+        "promotion": "true",
+        "model_source": "custom",
+        "stage": "production",
+        "alias": "production",
+    }
+    if extra_tags:
+        tags.update(extra_tags)
     model = Model(
         path=_job_artifact_uri(run_id, CUSTOM_MODEL_ARTIFACT_PATH),
         name=model_name,
         type=AssetTypes.URI_FOLDER,
         description="Custom trained fraud detection model",
-        tags={
-            "experiment_name": settings.custom_train_exp,
-            "selected_metric": metric,
-            "metric_name": metric,
-            "metric_value": str(metric_value),
-            "run_id": run_id,
-            "promotion": "true",
-        },
+        tags=tags,
     )
     return ml_client.models.create_or_update(model)
 
