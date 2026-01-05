@@ -97,6 +97,7 @@ def best_run_by_metric(
     metric: str | Sequence[str],
     direction: str = "max",  # "max" or "min"
     view_type: ViewType = ViewType.ACTIVE_ONLY,
+    status: str | None = None,
     experiment_name: str | None = None,
     settings: Settings | None = None,
 ) -> BestRun:
@@ -124,6 +125,11 @@ def best_run_by_metric(
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise RuntimeError(f"Metric column(s) not found in MLflow results: {missing}")
+
+    if status:
+        if "status" not in df.columns:
+            raise RuntimeError("MLflow search results missing status column; cannot filter by run status.")
+        df = df[df["status"] == status]
 
     # Drop runs missing any of the requested metric columns, then sort
     df = df.dropna(subset=cols).sort_values(by=cols, ascending=ascending)

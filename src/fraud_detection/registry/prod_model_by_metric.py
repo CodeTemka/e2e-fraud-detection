@@ -147,17 +147,24 @@ def register_prod_model(
         best_run_id,
     )
 
+    tags = {
+        "experiment_name": cfg.automl_train_exp,
+        "selected_metric": metric,
+        "metric_name": metric,
+        "metric_value": str(best.metric_value),
+        "best_run_id": best_run_id,
+        "promotion": str(should_promote),
+        "model_source": "automl",
+    }
+    if should_promote:
+        tags.update({"stage": "production", "alias": "production"})
+
     register_model_from_run(
         ml_client,
         model_name=chosen_name,
         best_child_run=best_run_id,
         description="AutoML classification model registered by metric comparison",
-        tags={
-            "experiment_name": cfg.automl_train_exp,
-            "selected_metric": metric,
-            "best_run_id": best_run_id,
-            "promotion": str(should_promote),
-        },
+        tags=tags,
     )
     return chosen_name
 
