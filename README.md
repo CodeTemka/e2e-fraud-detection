@@ -87,6 +87,19 @@ Register the best child run for each completed AutoML job:
 fraud-cli register-best-automl-model --best-child-run
 ```
 
+Register and (if better) promote the best custom-trained model, then deploy with top-K alerting:
+```bash
+fraud-cli register-best-custom-model --metric average_precision_score_macro
+```
+
+Custom scoring payloads (online endpoint) accept raw feature values and optional alert caps:
+```json
+{
+  "data": [{"Time": 0, "Amount": 123.4, "V1": 0.1, "...": 0.0}],
+  "alert_cap": 100
+}
+```
+
 Create an online endpoint, deploy the production model, and invoke it:
 ```bash
 fraud-cli endpoint-create
