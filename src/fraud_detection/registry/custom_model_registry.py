@@ -9,7 +9,7 @@ from azure.core.exceptions import HttpResponseError
 
 from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import Settings, get_settings
-from fraud_detection.registry.automl_registry import _job_artifact_uri, mlflow_tracking_uri
+from fraud_detection.registry.automl_registry import job_artifact_uri, mlflow_tracking_uri
 from fraud_detection.registry.best_runs_by_metric import BestRun, best_run_by_metric
 from fraud_detection.registry.prod_model_by_metric import current_prod_model_metric
 from fraud_detection.utils.logging import get_logger
@@ -106,7 +106,7 @@ def register_custom_model_from_run(
     if extra_tags:
         tags.update(extra_tags)
     model = Model(
-        path=_job_artifact_uri(run_id, CUSTOM_MODEL_ARTIFACT_PATH),
+        path=job_artifact_uri(run_id, CUSTOM_MODEL_ARTIFACT_PATH),
         name=model_name,
         type=AssetTypes.URI_FOLDER,
         description="Custom trained fraud detection model",

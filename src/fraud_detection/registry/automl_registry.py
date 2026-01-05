@@ -61,7 +61,7 @@ def _get_best_child_run_id(parent_run_id: str) -> str | None:
     return None
 
 
-def _job_artifact_uri(job_id: str, artifact_rel_path: str) -> str:
+def job_artifact_uri(job_id: str, artifact_rel_path: str) -> str:
     """Build a job artifact URI for model registration."""
     ap = artifact_rel_path.strip().strip("/")
     # NOTE: This is the correct job-artifact URI pattern
@@ -99,7 +99,7 @@ def register_model_from_run(
     for ap in candidates:
         try:
             registered_model = Model(
-                path=_job_artifact_uri(best_child_run, ap),
+                path=job_artifact_uri(best_child_run, ap),
                 name=model_name or _model_name(best_child_run),
                 description=description,
                 type=AssetTypes.MLFLOW_MODEL,
@@ -171,4 +171,5 @@ __all__ = [
     "register_best_child_run",
     "register_model_from_run",
     "mlflow_tracking_uri",
+    'job_artifact_uri'
 ]
