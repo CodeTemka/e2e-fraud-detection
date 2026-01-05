@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import json
+import logging
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +34,7 @@ class ModelAssets:
 
 MODEL_ASSETS: ModelAssets | None = None
 DEFAULT_ALERT_CAP = 100
+APP_INSIGHTS_CONFIGURED = False
 
 
 def _load_metadata(model_dir: Path) -> dict[str, Any]:
@@ -59,6 +64,49 @@ def _load_model(model_dir: Path, model_type: str) -> Any:
         return Booster(model_file=str(model_path))
 
     raise ValueError(f"Unsupported model_type '{model_type}'.")
+
+
+def _get_app_insights_connection_string() -> str | None:
+    for env_key in (
+        "APPLICATIONINSIGHTS_CONNECTION_STRING",
+        "APPINSIGHTS_CONNECTION_STRING",
+        "AZURE_MONITOR_CONNECTION_STRING",
+    ):
+        value = os.environ.get(env_key)
+        if value:
+            return value
+    return None
+
+
+def _configure_app_insights_logger() -> None:
+    global APP_INSIGHTS_CONFIGURED
+
+    if APP_INSIGHTS_CONFIGURED:
+        return
+
+    connection_string = _get_app_insights_connection_string()
+    if not connection_string:
+        return
+
+    if importlib.util.find_spec("opencensus.ext.azure.log_exporter") is None:
+        logger.info(
+            "Application Insights SDK not installed; skipping log handler setup.",
+            extra={"app_insights_configured": False},
+        )
+        APP_INSIGHTS_CONFIGURED = True
+        return
+
+    module = importlib.import_module("opencensus.ext.azure.log_exporter")
+    azure_handler = module.AzureLogHandler(connection_string=connection_string)
+    azure_handler.setLevel(logging.INFO)
+
+    root_logger = logging.getLogger("fraud_detection")
+    root_logger.addHandler(azure_handler)
+    APP_INSIGHTS_CONFIGURED = True
+    logger.info(
+        "Application Insights log handler configured.",
+        extra={"app_insights_configured": True},
+    )
 
 
 def _predict_proba(model: Any, model_type: str, features: pd.DataFrame) -> np.ndarray:
@@ -177,6 +225,8 @@ def init() -> None:
     global MODEL_ASSETS
     global DEFAULT_ALERT_CAP
 
+    _configure_app_insights_logger()
+
     model_dir = Path(os.environ.get("AZUREML_MODEL_DIR", ".")).resolve()
     metadata = _load_metadata(model_dir)
     model_type = metadata.get("model_type")
@@ -219,11 +269,23 @@ def run(raw_data: Any) -> dict[str, Any]:
     if MODEL_ASSETS is None:
         raise RuntimeError("Model assets not initialized. Call init() first.")
 
+    start_time = time.perf_counter()
     df, alert_cap_override = _coerce_records(raw_data)
     df, row_ids = _extract_row_ids(df)
     features = _prepare_features(df, MODEL_ASSETS)
 
     if features.empty:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "inference_empty",
+            extra={
+                "batch": len(df),
+                "alert_cap_override": alert_cap_override,
+                "alert_cap": 0,
+                "num_alerts": 0,
+                "duration_ms": duration_ms,
+            },
+        )
         response = {
             "predictions": [],
             "probabilities": [],
@@ -240,6 +302,22 @@ def run(raw_data: Any) -> dict[str, Any]:
 
     probabilities = _predict_proba(MODEL_ASSETS.model, MODEL_ASSETS.model_type, features)
     predictions, threshold, num_alerts = apply_top_k_threshold(probabilities, alert_cap)
+
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "inference",
+        extra={
+            "batch": len(df),
+            "avg_score": float(np.mean(probabilities)),
+            "min_score": float(np.min(probabilities)),
+            "max_score": float(np.max(probabilities)),
+            "alert_cap_override": alert_cap_override,
+            "alert_cap": alert_cap,
+            "num_alerts": num_alerts,
+            "threshold": threshold,
+            "duration_ms": duration_ms,
+        },
+    )
 
     response = {
         "predictions": predictions,
