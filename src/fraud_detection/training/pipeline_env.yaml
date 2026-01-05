@@ -1,0 +1,9 @@
+name: fraud-pipeline-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - azure-ai-ml
+      - azure-identity

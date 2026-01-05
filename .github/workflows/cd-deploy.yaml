@@ -69,25 +69,6 @@ jobs:
         run: |
           az extension add -n ml -y
 
-      - name: Validate data
+      - name: Submit Azure ML training pipeline
         run: |
-          fraud-cli validate-data
-
-      - name: Select and register production model
-        id: select_model
-        run: |
-          fraud-cli select-and-register-prod-model --output-file "$GITHUB_OUTPUT"
-
-      - name: Ensure online endpoint exists
-        run: |
-          fraud-cli endpoint-create
-
-      - name: Deploy latest model version to endpoint
-        if: steps.select_model.outputs.promoted == 'true'
-        run: |
-          fraud-cli deploy
-
-      - name: Smoke test deployed endpoint
-        if: steps.select_model.outputs.promoted == 'true'
-        run: |
-          fraud-cli serve-invoke 
+          python -m fraud_detection.training.pipeline submit
