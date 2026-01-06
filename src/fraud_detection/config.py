@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import re
+import subprocess
 from typing import ClassVar
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from fraud_detection.data.data_validation import ValidationOptions, validate_creditcard_data
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -191,6 +195,85 @@ class Settings(BaseSettings):
                 "Deployment instance type is not configured. Set DEPLOYMENT_INSTANCE_TYPE."
             )
         return instance_type
+
+
+def slugify(value: str) -> str:
+    """Make a string safe for Azure ML asset names (lowercase, hyphen-separated)."""
+    text = (value or "").lower().strip()
+    text = text.replace("_", "-")
+    text = re.sub(r"[^a-z0-9-]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text or "job"
+
+
+def get_git_sha(*, short: bool = True) -> str:
+    """Return the current git commit SHA (best-effort)."""
+    try:
+        cp = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return "unknown"
+    sha = cp.stdout.strip() or "unknown"
+    return sha[:7] if short else sha
+
+
+def build_idempotency_key(experiment: str, metric: str, *, git_sha: str | None = None) -> str:
+    """Build a canonical idempotency key for job/model submissions."""
+    resolved_sha = (git_sha or get_git_sha(short=True) or "unknown").strip() or "unknown"
+    return slugify(f"{experiment}-{metric}-{resolved_sha}")
+
+
+def build_job_name(prefix: str, idempotency_key: str) -> str:
+    """Build a deterministic job name using a prefix and idempotency key."""
+    return slugify(f"{prefix}-{idempotency_key}")
+
+
+def _load_local_table(path: str, *, sample_rows: int | None = None):
+    p = Path(path)
+    if p.is_file() and p.suffix.lower() == ".csv":
+        import pandas as pd
+
+        return pd.read_csv(p, nrows=sample_rows)
+
+    if p.is_dir() and (p / "MLTable").is_file():
+        import mltable
+
+        tbl = mltable.load(str(p))
+        if sample_rows is not None:
+            tbl = tbl.take(int(sample_rows))
+        return tbl.to_pandas_dataframe()
+
+    raise ValueError("Unsupported path. Provide a .csv file or a folder containing an MLTable file.")
+
+
+def preflight_validate_training_data(
+    training_data: str,
+    *,
+    sample_rows: int = 1000,
+    check_balance: bool = True,
+) -> bool:
+    """Validate local training data before job submission.
+
+    Returns True if validation ran, False if skipped (non-local or remote dataset).
+    """
+    if not training_data:
+        raise ValueError("training_data is empty. Provide an MLTable asset path/ID/URI.")
+
+    if training_data.startswith("azureml:") or re.match(r"^[a-z]+://", training_data):
+        return False
+
+    data_path = Path(training_data)
+    if not data_path.exists():
+        raise FileNotFoundError(f"Training data not found at {training_data}")
+
+    df = _load_local_table(training_data, sample_rows=sample_rows)
+    options = ValidationOptions(check_balance=check_balance)
+    validate_creditcard_data(df, options=options)
+    return True
 
 
 

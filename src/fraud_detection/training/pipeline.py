@@ -9,9 +9,17 @@ from azure.ai.ml import Input, MLClient, Output, command
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.dsl import pipeline
 from azure.ai.ml.entities import Environment, Model
+from azure.core.exceptions import ResourceNotFoundError
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import ROOT_DIR, Settings, get_settings
+from fraud_detection.config import (
+    ROOT_DIR,
+    Settings,
+    build_idempotency_key,
+    build_job_name,
+    get_settings,
+    preflight_validate_training_data,
+)
 from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
 from fraud_detection.serving.online_endpoint import ensure_endpoint, set_initial_traffic
 from fraud_detection.training.submit_xgb import resolve_xgb_environment, xgb_sweep_job_builder
@@ -307,6 +315,35 @@ def submit_pipeline(*, settings: Settings | None = None) -> str:
     resolved_settings = settings or get_settings()
     ml_client = get_ml_client(settings=resolved_settings)
 
+    validated = preflight_validate_training_data(resolved_settings.registered_data_path)
+    if validated:
+        logger.info(
+            "Preflight data validation passed",
+            extra={"dataset": resolved_settings.registered_data_path},
+        )
+    else:
+        logger.info(
+            "Preflight data validation skipped",
+            extra={"dataset": resolved_settings.registered_data_path},
+        )
+
+    idempotency_key = build_idempotency_key(
+        resolved_settings.custom_train_exp,
+        resolved_settings.default_metric,
+    )
+    job_name = build_job_name("training-pipeline", idempotency_key)
+    try:
+        existing = ml_client.jobs.get(job_name)
+    except ResourceNotFoundError:
+        existing = None
+    if existing:
+        status = getattr(existing, "status", None)
+        logger.info(
+            "Existing training pipeline job reused",
+            extra={"job_name": existing.name, "status": status},
+        )
+        return existing.name
+
     config = PipelineConfig(
         experiment_name=resolved_settings.custom_train_exp,
         training_data=resolved_settings.registered_data_path,
@@ -330,6 +367,12 @@ def submit_pipeline(*, settings: Settings | None = None) -> str:
         training_env=training_env,
         pipeline_env=pipeline_env,
     )
+    pipeline_job.name = job_name
+    pipeline_job.tags = {
+        "project": "fraud-detection",
+        "metric": resolved_settings.default_metric,
+        "idempotency_key": idempotency_key,
+    }
     created = ml_client.jobs.create_or_update(pipeline_job)
     logger.info("Submitted training pipeline", extra={"pipeline_job": created.name})
     return created.name

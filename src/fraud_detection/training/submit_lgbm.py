@@ -17,7 +17,16 @@ from azure.ai.ml.sweep import (
 )
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import ROOT_DIR, Settings, get_settings
+from azure.core.exceptions import ResourceNotFoundError
+
+from fraud_detection.config import (
+    ROOT_DIR,
+    Settings,
+    build_idempotency_key,
+    build_job_name,
+    get_settings,
+    preflight_validate_training_data,
+)
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -81,6 +90,8 @@ class LGBMSweepConfig:
     early_stopping_interval: int = 2
 
     tags: dict[str, str] = field(default_factory=dict)
+    job_name: str | None = None
+    idempotency_key: str | None = None
 
 
 def lgbm_sweep_job_builder(
@@ -93,6 +104,7 @@ def lgbm_sweep_job_builder(
     resolved_metric = _metric_check(metric)
     resolved_settings = settings or get_settings()
     compute_target = (compute or "").strip() or resolved_settings.get_training_compute()
+    idempotency_key = build_idempotency_key(resolved_settings.custom_train_exp, resolved_metric)
     return LGBMSweepConfig(
         experiment_name=resolved_settings.custom_train_exp,
         training_data=training_data,
@@ -101,7 +113,14 @@ def lgbm_sweep_job_builder(
         primary_metric=resolved_metric,
         environment_name=resolved_settings.lgbm_env_name,
         environment_version=resolved_settings.lgbm_env_version,
-        tags={"project": "fraud-detection", "model": "lightgbm", "metric": resolved_metric},
+        tags={
+            "project": "fraud-detection",
+            "model": "lightgbm",
+            "metric": resolved_metric,
+            "idempotency_key": idempotency_key,
+        },
+        job_name=build_job_name("lgbm-sweep", idempotency_key),
+        idempotency_key=idempotency_key,
     )
 
 
@@ -199,10 +218,31 @@ def create_lgbm_sweep_job(config: LGBMSweepConfig, *, environment: str) -> Any:
     sweep_job.display_name = "lgbm-sweep"
     sweep_job.experiment_name = config.experiment_name
     sweep_job.tags = config.tags
+    if config.job_name:
+        sweep_job.name = config.job_name
     return sweep_job
 
 
 def submit_lgbm_sweep_job(ml_client: MLClient, config: LGBMSweepConfig) -> str:
+    validated = preflight_validate_training_data(config.training_data)
+    if validated:
+        logger.info("Preflight data validation passed", extra={"dataset": config.training_data})
+    else:
+        logger.info("Preflight data validation skipped", extra={"dataset": config.training_data})
+
+    if config.job_name:
+        try:
+            existing = ml_client.jobs.get(config.job_name)
+        except ResourceNotFoundError:
+            existing = None
+        if existing:
+            status = getattr(existing, "status", None)
+            logger.info(
+                "Existing LightGBM sweep job reused",
+                extra={"job_name": existing.name, "status": status},
+            )
+            return existing.name
+
     environment = resolve_lgbm_environment(ml_client, config)
     job = create_lgbm_sweep_job(config, environment=environment)
     created = ml_client.jobs.create_or_update(job)
