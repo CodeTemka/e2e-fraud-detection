@@ -7,7 +7,7 @@ from azure.core.exceptions import HttpResponseError
 from mlflow.tracking import MlflowClient
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import Settings, get_settings
+from fraud_detection.config import Settings, build_idempotency_key, get_git_sha, get_settings
 from fraud_detection.registry.automl_registry import mlflow_tracking_uri, register_model_from_run
 from fraud_detection.registry.best_runs_by_metric import BestRun, best_run_by_metric
 from fraud_detection.utils.logging import get_logger
@@ -188,6 +188,7 @@ def register_prod_model(
 
     stage = "production" if should_promote else "staging"
     alias = "production" if should_promote else "staging"
+    idempotency_key = build_idempotency_key(cfg.automl_train_exp, metric)
     tags = {
         "experiment_name": cfg.automl_train_exp,
         "selected_metric": metric,
@@ -195,6 +196,8 @@ def register_prod_model(
         "metric_value": str(best.metric_value),
         "best_run_id": best_run_id,
         "run_id": best_run_id,
+        "git_sha": get_git_sha(short=False),
+        "idempotency_key": idempotency_key,
         "promotion": str(should_promote).lower(),
         "promotion_decision": "promote" if should_promote else "stage",
         "model_source": "automl",

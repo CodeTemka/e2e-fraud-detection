@@ -52,6 +52,8 @@ jobs:
         with:
           # azure-ai-ml supports up to Python 3.11 today
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
 
       - name: Upgrade pip and install build backend
         run: python -m pip install --upgrade pip build

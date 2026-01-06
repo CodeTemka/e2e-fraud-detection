@@ -20,19 +20,27 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.lock
-          pip install -e .
+          pip install -e ".[dev]"
 
       - name: Lint
         run: ruff check .
 
       - name: Test
-        run: pytest -m "not integration"
+        run: |
+          mkdir -p artifacts
+          pytest -m "not integration" --junitxml=artifacts/pytest.xml
+
+      - name: Upload pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: artifacts/pytest.xml
 
   security-scan:
     runs-on: ubuntu-latest
@@ -47,16 +55,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: pyproject.toml
 
-      - name: Install pip-audit
+      - name: Install dependencies and pip-audit
         run: |
           python -m pip install --upgrade pip
-          pip install pip-audit
+          pip install -e ".[dev]"
 
       - name: Audit dependencies for critical vulnerabilities
         run: |
-          pip-audit -r requirements.lock --strict --severity critical
+          pip-audit --strict --severity critical
 
       - name: Secret scanning
         uses: gitleaks/gitleaks-action@v2

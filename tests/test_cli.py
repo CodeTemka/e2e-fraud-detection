@@ -224,3 +224,75 @@ def test_submit_lgbm_sweep_dry_run(monkeypatch):
     assert captured["compute"] == "cpu-cluster"
     assert captured["compute_checked"] is True
     assert "Built LightGBM sweep job: lgbm-exp" in result.output
+
+
+def test_select_and_register_prod_model_writes_output_file(monkeypatch, tmp_path):
+    runner = CliRunner()
+    output_file = tmp_path / "outputs.txt"
+
+    class FakeSettings:
+        default_metric = "AUC_macro"
+
+    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+
+    result_payload = SimpleNamespace(
+        promoted=True,
+        model_name="prod-model",
+        model_version="12",
+        model_source="custom",
+        metric="AUC_macro",
+        automl_metric=0.8,
+        custom_metric=0.9,
+        prod_metric=0.75,
+    )
+    monkeypatch.setattr(cli, "select_prod_model", lambda **_kwargs: result_payload)
+
+    result = runner.invoke(
+        cli.app,
+        ["select-and-register-prod-model", "--output-file", str(output_file)],
+    )
+
+    assert result.exit_code == 0
+    assert output_file.exists()
+    assert output_file.read_text(encoding="utf-8").strip().splitlines() == [
+        "model_name=prod-model",
+        "model_source=custom",
+        "model_version=12",
+        "promoted=true",
+    ]
+
+
+def test_select_and_register_prod_model_uses_github_output_env(monkeypatch, tmp_path):
+    runner = CliRunner()
+    output_file = tmp_path / "outputs.txt"
+
+    class FakeSettings:
+        default_metric = "AUC_macro"
+
+    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
+
+    result_payload = SimpleNamespace(
+        promoted=False,
+        model_name=None,
+        model_version=None,
+        model_source=None,
+        metric="AUC_macro",
+        automl_metric=0.8,
+        custom_metric=0.7,
+        prod_metric=0.85,
+    )
+    monkeypatch.setattr(cli, "select_prod_model", lambda **_kwargs: result_payload)
+
+    result = runner.invoke(cli.app, ["select-and-register-prod-model"])
+
+    assert result.exit_code == 0
+    assert output_file.exists()
+    assert output_file.read_text(encoding="utf-8").strip().splitlines() == [
+        "model_name=",
+        "model_source=",
+        "model_version=",
+        "promoted=false",
+    ]
