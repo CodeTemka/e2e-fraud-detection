@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from pathlib import Path
 
@@ -14,10 +15,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler
 from xgboost import XGBClassifier
 
+from fraud_detection.config import get_git_sha
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
@@ -40,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--test_size", type=float, default=0.2)
     p.add_argument("--val_size", type=float, default=0.2)  # fraction of TRAIN split used for validation
     p.add_argument("--random_state", type=int, default=42)
+    p.add_argument("--dataset_version", type=str, default=None)
 
     # Early stopping (optional)
     p.add_argument("--early_stopping_rounds", type=int, default=50)
@@ -50,15 +54,30 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def resolve_dataset_version(args: argparse.Namespace) -> str:
+    return (
+        args.dataset_version
+        or os.getenv("DATASET_VERSION")
+        or os.getenv("AML_DATASET_VERSION")
+        or "unknown"
+    )
+
+
 def main() -> None:
     args = parse_args()
 
     np.random.seed(args.random_state)
     random.seed(args.random_state)
+    dataset_version = resolve_dataset_version(args)
 
     logger.info(
         "Loading training data",
-        extra={"train_data": args.train_data, "label_col": args.label_col},
+        extra={
+            "train_data": args.train_data,
+            "label_col": args.label_col,
+            "random_state": args.random_state,
+            "dataset_version": dataset_version,
+        },
     )
     original_df = pd.read_csv(args.train_data)
     if args.label_col not in original_df.columns:
@@ -119,6 +138,9 @@ def main() -> None:
     # Azure ML sweep expects the primary metric name to match EXACTLY what you log. :contentReference[oaicite:1]{index=1}
     if mlflow.active_run() is None:
         mlflow.start_run()
+
+    mlflow.set_tag("git_sha", get_git_sha())
+    mlflow.set_tag("dataset_version", dataset_version)
 
     # Log params (nice to see in the sweep UI)
     mlflow.log_params(

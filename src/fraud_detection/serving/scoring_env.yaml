@@ -5,10 +5,10 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - numpy
-      - pandas
-      - scikit-learn
-      - joblib
-      - xgboost
-      - lightgbm
-      - azureml-inference-server-http
+      - numpy==1.26.4
+      - pandas==2.3.3
+      - scikit-learn==1.8.0
+      - joblib==1.4.2
+      - xgboost==2.1.1
+      - lightgbm==4.6.0
+      - azureml-inference-server-http==0.8.4
