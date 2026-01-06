@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import mlflow
 from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Model
@@ -36,10 +37,11 @@ def _metric_direction(metric: str) -> str:
     return "max"
 
 
-def _is_better(best: float, current: float, *, direction: str, epsilon: float) -> bool:
+def _is_better(best: float, current: float, *, direction: str, epsilon: float, delta: float) -> bool:
+    required_delta = max(float(epsilon), float(delta))
     if direction == "min":
-        return best < (current - epsilon)
-    return best > (current + epsilon)
+        return best < (current - required_delta)
+    return best > (current + required_delta)
 
 
 def _parse_version(v: str | None) -> int:
@@ -75,6 +77,32 @@ def _current_prod_metric_from_tags(ml_client: MLClient, metric: str, *, settings
     return None
 
 
+def _shadow_model_name(run_id: str) -> str:
+    """Name for non-production registrations (keeps prod model name stable)."""
+    return f"model_{run_id}"
+
+
+def _get_run_tag(run_id: str, tag_name: str) -> str | None:
+    try:
+        run = mlflow.get_run(run_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Failed reading run tag", extra={"run_id": run_id, "tag": tag_name, "error": str(exc)})
+        return None
+    return run.data.tags.get(tag_name)
+
+
+def _dataset_version_for_run(run_id: str) -> str:
+    return _get_run_tag(run_id, "dataset_version") or "unknown"
+
+
+def _meets_min_threshold(metric_value: float, *, direction: str, min_threshold: float | None) -> bool:
+    if min_threshold is None:
+        return True
+    if direction == "min":
+        return metric_value <= min_threshold
+    return metric_value >= min_threshold
+
+
 def _resolve_prod_metric(ml_client: MLClient, metric: str, *, settings: Settings) -> float | None:
     from_tags = _current_prod_metric_from_tags(ml_client, metric, settings=settings)
     if from_tags is not None:
@@ -90,6 +118,9 @@ def register_custom_model_from_run(
     metric: str,
     metric_value: float,
     settings: Settings,
+    promotion: bool = True,
+    stage: str = "production",
+    alias: str | None = "production",
     extra_tags: dict[str, str] | None = None,
 ) -> Model:
     tags = {
@@ -98,11 +129,14 @@ def register_custom_model_from_run(
         "metric_name": metric,
         "metric_value": str(metric_value),
         "run_id": run_id,
-        "promotion": "true",
+        "promotion": str(promotion).lower(),
+        "promotion_decision": "promote" if promotion else "stage",
         "model_source": "custom",
-        "stage": "production",
-        "alias": "production",
+        "stage": stage,
+        "dataset_version": _dataset_version_for_run(run_id),
     }
+    if alias:
+        tags["alias"] = alias
     if extra_tags:
         tags.update(extra_tags)
     model = Model(
@@ -135,10 +169,20 @@ def register_best_custom_model(
     prod_metric = _resolve_prod_metric(ml_client, metric, settings=cfg)
 
     epsilon = cfg.promotion_metric_epsilon
+    min_threshold = cfg.promotion_min_metric
+    delta_threshold = cfg.promotion_metric_delta
     if prod_metric is None:
-        should_promote = True
+        should_promote = _meets_min_threshold(best.metric_value, direction=direction, min_threshold=min_threshold)
     else:
-        should_promote = _is_better(best.metric_value, prod_metric, direction=direction, epsilon=epsilon)
+        should_promote = _meets_min_threshold(
+            best.metric_value, direction=direction, min_threshold=min_threshold
+        ) and _is_better(
+            best.metric_value,
+            prod_metric,
+            direction=direction,
+            epsilon=epsilon,
+            delta=delta_threshold,
+        )
 
     logger.info(
         "Custom model promotion decision",
@@ -149,31 +193,29 @@ def register_best_custom_model(
             "prod_metric": prod_metric,
             "promote": should_promote,
             "epsilon": epsilon,
+            "min_threshold": min_threshold,
+            "delta_threshold": delta_threshold,
             "run_id": best.run_id,
         },
     )
 
-    if not should_promote:
-        return PromotionResult(
-            promoted=False,
-            model_name=None,
-            model_version=None,
-            best_run=best,
-            best_metric=best.metric_value,
-            prod_metric=prod_metric,
-        )
-
+    model_name = cfg.prod_model_name if should_promote else _shadow_model_name(best.run_id)
+    stage = "production" if should_promote else "staging"
+    alias = "production" if should_promote else "staging"
     registered = register_custom_model_from_run(
         ml_client,
-        model_name=cfg.prod_model_name,
+        model_name=model_name,
         run_id=best.run_id,
         metric=metric,
         metric_value=best.metric_value,
         settings=cfg,
+        promotion=should_promote,
+        stage=stage,
+        alias=alias,
     )
 
     return PromotionResult(
-        promoted=True,
+        promoted=should_promote,
         model_name=registered.name,
         model_version=str(registered.version),
         best_run=best,
