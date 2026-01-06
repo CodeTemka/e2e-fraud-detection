@@ -1,15 +1,10 @@
-name: CI
+name: Integration Tests
 
 on:
-  push:
-    branches: ["main", "master"]
-    tags:
-      - "v*"
-  pull_request:
-    branches: ["main", "master"]
+  workflow_dispatch:
 
 jobs:
-  lint-and-test:
+  integration:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,8 +23,5 @@ jobs:
           pip install -r requirements.lock
           pip install -e .
 
-      - name: Lint
-        run: ruff check .
-
-      - name: Test
-        run: pytest -m "not integration"
+      - name: Run integration tests
+        run: pytest -m "integration"
