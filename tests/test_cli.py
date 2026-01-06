@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from typer.testing import CliRunner
 
 from fraud_detection import cli
@@ -119,3 +121,107 @@ def test_submit_automl_uses_defaults(monkeypatch):
     assert captured["primary_metric"] == "norm_macro_recall"
     assert captured["submitted_job"] == {"job": "definition"}
     assert "Submitted AutoML job: run-123" in result.output
+
+
+@pytest.mark.cli
+def test_submit_xgb_sweep_dry_run(monkeypatch):
+    runner = CliRunner()
+    captured = {}
+
+    class FakeSettings:
+        registered_data_path = "azureml:dataset:1"
+        training_compute = "cpu-cluster"
+        instance_type = "Standard_DS3_v2"
+        compute_min_nodes = 0
+        compute_max_nodes = 2
+        xgb_env_name = "xgb-env"
+        xgb_env_version = "1"
+
+        def get_training_compute(self):
+            return self.training_compute
+
+    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+
+    def fake_ensure_training_compute(*_args, **_kwargs):
+        captured["compute_checked"] = True
+
+    monkeypatch.setattr(cli, "ensure_training_compute", fake_ensure_training_compute)
+
+    def fake_builder(**kwargs):
+        captured["training_data"] = kwargs["training_data"]
+        captured["metric"] = kwargs["metric"]
+        captured["compute"] = kwargs["compute"]
+        return SimpleNamespace(
+            experiment_name="xgb-exp",
+            environment_name="xgb-env",
+            environment_version="1",
+        )
+
+    monkeypatch.setattr(cli, "xgb_sweep_job_builder", fake_builder)
+    monkeypatch.setattr(cli, "resolve_xgb_environment", lambda *_args, **_kwargs: "xgb-env:1")
+    monkeypatch.setattr(
+        cli, "create_xgb_sweep_job", lambda *_args, **_kwargs: SimpleNamespace(experiment_name="xgb-exp")
+    )
+    monkeypatch.setattr(cli, "submit_xgb_sweep_job", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
+
+    result = runner.invoke(cli.app, ["submit-xgb-sweep", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert captured["training_data"] == "azureml:dataset:1"
+    assert captured["metric"] == "metrics.average_precision_score_macro"
+    assert captured["compute"] == "cpu-cluster"
+    assert captured["compute_checked"] is True
+    assert "Built XGBoost sweep job: xgb-exp" in result.output
+
+
+@pytest.mark.cli
+def test_submit_lgbm_sweep_dry_run(monkeypatch):
+    runner = CliRunner()
+    captured = {}
+
+    class FakeSettings:
+        registered_data_path = "azureml:dataset:1"
+        training_compute = "cpu-cluster"
+        instance_type = "Standard_DS3_v2"
+        compute_min_nodes = 0
+        compute_max_nodes = 2
+        lgbm_env_name = "lgbm-env"
+        lgbm_env_version = "2"
+
+        def get_training_compute(self):
+            return self.training_compute
+
+    monkeypatch.setattr(cli, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(cli, "get_ml_client", lambda settings: "ml-client")
+
+    def fake_ensure_training_compute(*_args, **_kwargs):
+        captured["compute_checked"] = True
+
+    monkeypatch.setattr(cli, "ensure_training_compute", fake_ensure_training_compute)
+
+    def fake_builder(**kwargs):
+        captured["training_data"] = kwargs["training_data"]
+        captured["metric"] = kwargs["metric"]
+        captured["compute"] = kwargs["compute"]
+        return SimpleNamespace(
+            experiment_name="lgbm-exp",
+            environment_name="lgbm-env",
+            environment_version="2",
+        )
+
+    monkeypatch.setattr(cli, "lgbm_sweep_job_builder", fake_builder)
+    monkeypatch.setattr(cli, "resolve_lgbm_environment", lambda *_args, **_kwargs: "lgbm-env:2")
+    monkeypatch.setattr(
+        cli, "create_lgbm_sweep_job", lambda *_args, **_kwargs: SimpleNamespace(experiment_name="lgbm-exp")
+    )
+    monkeypatch.setattr(cli, "submit_lgbm_sweep_job", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
+
+    result = runner.invoke(cli.app, ["submit-lgbm-sweep", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert captured["training_data"] == "azureml:dataset:1"
+    assert captured["metric"] == "metrics.average_precision_score_macro"
+    assert captured["compute"] == "cpu-cluster"
+    assert captured["compute_checked"] is True
+    assert "Built LightGBM sweep job: lgbm-exp" in result.output

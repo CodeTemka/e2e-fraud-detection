@@ -1,18 +1,23 @@
 """Opinionated helpers to submit Azure AutoML jobs."""
 from __future__ import annotations
 
-import re
-import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 from azure.ai.ml import Input, MLClient, automl
 from azure.ai.ml.automl import ClassificationPrimaryMetrics
 from azure.ai.ml.constants import AssetTypes
+from azure.core.exceptions import ResourceNotFoundError
 
-from fraud_detection.config import get_settings
+from fraud_detection.config import (
+    build_idempotency_key,
+    build_job_name,
+    get_git_sha,
+    get_settings,
+    preflight_validate_training_data,
+    slugify,
+)
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -26,37 +31,6 @@ SUPPORTED_CLASSIFICATION_METRICS: set[str] = {
     "norm_macro_recall",
     "precision_score_weighted",
 }
-
-
-def _slug(s: str) -> str:
-    """Make a string safe for Azure ML names (lowercase, hyphen-separated)."""
-    s = (s or "").lower().strip()
-    s = s.replace("_", "-")
-    s = re.sub(r"[^a-z0-9-]+", "-", s)
-    s = re.sub(r"-+", "-", s).strip("-")
-    return s or "job"
-
-
-def _get_git_sha() -> str:
-    """Return the current git commit SHA for tagging experiments (best-effort)."""
-    try:
-        cp = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        sha = cp.stdout.strip()
-        return sha or "unknown"
-    except Exception:
-        return "unknown"
-
-
-def _build_job_name(metric: str) -> str:
-    """Build a unique job name based on metric, timestamp, and git sha."""
-    stamp = datetime.now(UTC).strftime("%m%d-%H%M")
-    short_sha = _get_git_sha()[:5]
-    return _slug(f"{metric}-{stamp}-{short_sha}")
 
 
 @dataclass
@@ -81,6 +55,7 @@ class AutoMLJobConfig:
     enable_early_termination: bool = True
 
     job_name: str | None = None
+    idempotency_key: str | None = None
 
 
 def create_automl_job(config: AutoMLJobConfig) -> Any:
@@ -91,6 +66,12 @@ def create_automl_job(config: AutoMLJobConfig) -> Any:
         raise ValueError("config.experiment_name is empty.")
     if not config.target_column:
         raise ValueError("config.target_column is empty.")
+
+    validated = preflight_validate_training_data(config.training_data)
+    if validated:
+        logger.info("Preflight data validation passed", extra={"dataset": config.training_data})
+    else:
+        logger.info("Preflight data validation skipped", extra={"dataset": config.training_data})
 
     settings = get_settings()
     compute_target = (config.compute or "").strip() or settings.get_training_compute()
@@ -122,13 +103,30 @@ def create_automl_job(config: AutoMLJobConfig) -> Any:
     if config.allowed_algorithms:
         job.set_training(allowed_training_algorithms=list(config.allowed_algorithms))
 
-    desired_name = config.job_name or _build_job_name(metric=str(config.primary_metric))
-    job.name = _slug(desired_name)
+    idempotency_key = config.idempotency_key or build_idempotency_key(
+        config.experiment_name,
+        str(config.primary_metric),
+    )
+    desired_name = config.job_name or build_job_name("automl", idempotency_key)
+    job.name = slugify(desired_name)
     return job
 
 
 def submit_job(ml_client: MLClient, job: Any) -> str:
     """Submit a job and return the created job name."""
+    job_name = getattr(job, "name", None)
+    if job_name:
+        try:
+            existing = ml_client.jobs.get(job_name)
+        except ResourceNotFoundError:
+            existing = None
+        else:
+            status = getattr(existing, "status", None)
+            logger.info(
+                "Existing AutoML job reused",
+                extra={"job_name": existing.name, "status": status},
+            )
+            return existing.name
     returned_job = ml_client.jobs.create_or_update(job)
     logger.info("Submitted AutoML job", extra={"job_name": returned_job.name})
     return returned_job.name
@@ -156,9 +154,9 @@ def automl_job_builder(
     """Generic job builder based on specified metric (optionally restrict algorithms)."""
     resolved_metric = _metric_check(metric)
     settings = get_settings()
-    # Use metric string for experiment/job naming (clean + stable)
-    metric_slug = _slug(resolved_metric)
     compute_target = (compute or "").strip() or settings.get_training_compute()
+
+    idempotency_key = build_idempotency_key(settings.automl_train_exp, resolved_metric)
 
     return AutoMLJobConfig(
         experiment_name=settings.automl_train_exp,
@@ -170,11 +168,13 @@ def automl_job_builder(
         tags={
             "project": "fraud-detection",
             "metric": resolved_metric,
-            "git_sha": _get_git_sha(),
+            "git_sha": get_git_sha(short=False),
+            "idempotency_key": idempotency_key,
             "allowed_algorithms": ",".join(allowed_algorithms) if allowed_algorithms else "auto",
         },
         max_trials=80,
-        job_name=_build_job_name(metric=metric_slug),
+        job_name=build_job_name("automl", idempotency_key),
+        idempotency_key=idempotency_key,
     )
 
 

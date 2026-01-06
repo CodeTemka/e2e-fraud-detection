@@ -20,6 +20,28 @@ def _shadow_model_name(run_id: str) -> str:
     return f"model_{run_id}"
 
 
+def _metric_direction(metric: str) -> str:
+    metric_lower = (metric or "").lower()
+    if any(key in metric_lower for key in ("loss", "error", "rmse", "mae")):
+        return "min"
+    return "max"
+
+
+def _is_better(best: float, current: float, *, direction: str, epsilon: float, delta: float) -> bool:
+    required_delta = max(float(epsilon), float(delta))
+    if direction == "min":
+        return best < (current - required_delta)
+    return best > (current + required_delta)
+
+
+def _meets_min_threshold(metric_value: float, *, direction: str, min_threshold: float | None) -> bool:
+    if min_threshold is None:
+        return True
+    if direction == "min":
+        return metric_value <= min_threshold
+    return metric_value >= min_threshold
+
+
 def _parse_version(version: str | None) -> int:
     try:
         return int(version or 0)
@@ -47,6 +69,19 @@ def _get_run_metric(run_id: str, metric: str) -> float:
     if metric not in run.data.metrics:
         raise KeyError(f"Metric '{metric}' not found in run {run_id}.")
     return float(run.data.metrics[metric])
+
+
+def _get_run_tag(run_id: str, tag_name: str) -> str | None:
+    try:
+        run = mlflow.get_run(run_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Failed reading run tag", extra={"run_id": run_id, "tag": tag_name, "error": str(exc)})
+        return None
+    return run.data.tags.get(tag_name)
+
+
+def _dataset_version_for_run(run_id: str) -> str:
+    return _get_run_tag(run_id, "dataset_version") or "unknown"
 
 
 def current_prod_model_metric(
@@ -122,19 +157,23 @@ def register_prod_model(
     # Current prod metric (if any)
     prod_metric = current_prod_model_metric(ml_client, metric, settings=cfg)
 
-    # NEW: if both exist and are equal -> do nothing
-    if prod_metric is not None and best.metric_value == prod_metric:
-        logger.info(
-            "Model promotion decision: promote=False (equal metrics) metric=%s best=%s current_prod=%s run_id=%s. "
-            "No registration performed.",
-            metric,
+    direction = _metric_direction(metric)
+    epsilon = cfg.promotion_metric_epsilon
+    min_threshold = cfg.promotion_min_metric
+    delta_threshold = cfg.promotion_metric_delta
+
+    if prod_metric is None:
+        should_promote = _meets_min_threshold(best.metric_value, direction=direction, min_threshold=min_threshold)
+    else:
+        should_promote = _meets_min_threshold(
+            best.metric_value, direction=direction, min_threshold=min_threshold
+        ) and _is_better(
             best.metric_value,
             prod_metric,
-            best_run_id,
+            direction=direction,
+            epsilon=epsilon,
+            delta=delta_threshold,
         )
-        return None
-
-    should_promote = (prod_metric is None) or (best.metric_value > prod_metric)
     chosen_name = cfg.prod_model_name if should_promote else _shadow_model_name(best_run_id)
 
     logger.info(
@@ -147,17 +186,22 @@ def register_prod_model(
         best_run_id,
     )
 
+    stage = "production" if should_promote else "staging"
+    alias = "production" if should_promote else "staging"
     tags = {
         "experiment_name": cfg.automl_train_exp,
         "selected_metric": metric,
         "metric_name": metric,
         "metric_value": str(best.metric_value),
         "best_run_id": best_run_id,
-        "promotion": str(should_promote),
+        "run_id": best_run_id,
+        "promotion": str(should_promote).lower(),
+        "promotion_decision": "promote" if should_promote else "stage",
         "model_source": "automl",
+        "dataset_version": _dataset_version_for_run(best_run_id),
+        "stage": stage,
+        "alias": alias,
     }
-    if should_promote:
-        tags.update({"stage": "production", "alias": "production"})
 
     register_model_from_run(
         ml_client,

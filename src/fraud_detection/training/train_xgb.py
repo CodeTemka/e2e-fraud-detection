@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from pathlib import Path
 
@@ -14,10 +15,20 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler
 from xgboost import XGBClassifier
 
+from fraud_detection.config import get_git_sha
+from fraud_detection.data.data_validation import (
+    ValidationOptions,
+    collect_validation_metrics,
+    compute_drift_metrics,
+    missing_required_columns,
+    required_columns_with_label,
+    validate_creditcard_data,
+)
 from fraud_detection.registry.best_runs_by_metric import AUTOML_DEFAULT_METRICS
 from fraud_detection.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
@@ -40,14 +51,33 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--test_size", type=float, default=0.2)
     p.add_argument("--val_size", type=float, default=0.2)  # fraction of TRAIN split used for validation
     p.add_argument("--random_state", type=int, default=42)
+    p.add_argument("--dataset_version", type=str, default=None)
 
     # Early stopping (optional)
     p.add_argument("--early_stopping_rounds", type=int, default=50)
 
     # Outputs (Azure ML captures ./outputs automatically)
     p.add_argument("--output_dir", type=str, default="outputs")
+    p.add_argument("--inference_data", type=str, default=None, help="Optional CSV of recent inference data.")
+    p.add_argument(
+        "--drift_method",
+        type=str,
+        choices=("psi", "ks"),
+        default="psi",
+        help="Drift metric to compute when inference data is supplied.",
+    )
+    p.add_argument("--drift_bins", type=int, default=10, help="Number of bins for PSI drift checks.")
 
     return p.parse_args()
+
+
+def resolve_dataset_version(args: argparse.Namespace) -> str:
+    return (
+        args.dataset_version
+        or os.getenv("DATASET_VERSION")
+        or os.getenv("AML_DATASET_VERSION")
+        or "unknown"
+    )
 
 
 def main() -> None:
@@ -55,10 +85,16 @@ def main() -> None:
 
     np.random.seed(args.random_state)
     random.seed(args.random_state)
+    dataset_version = resolve_dataset_version(args)
 
     logger.info(
         "Loading training data",
-        extra={"train_data": args.train_data, "label_col": args.label_col},
+        extra={
+            "train_data": args.train_data,
+            "label_col": args.label_col,
+            "random_state": args.random_state,
+            "dataset_version": dataset_version,
+        },
     )
     original_df = pd.read_csv(args.train_data)
     if args.label_col not in original_df.columns:
@@ -120,6 +156,21 @@ def main() -> None:
     if mlflow.active_run() is None:
         mlflow.start_run()
 
+    validation_options = ValidationOptions(
+        required_columns=required_columns_with_label(args.label_col),
+        label_column=args.label_col,
+    )
+    validation_metrics = collect_validation_metrics(original_df, options=validation_options)
+    mlflow.log_metrics(validation_metrics)
+    missing_columns = missing_required_columns(original_df, options=validation_options)
+    if missing_columns:
+        mlflow.set_tag("validation.missing_columns", ",".join(missing_columns))
+
+    validate_creditcard_data(original_df, options=validation_options)
+
+    mlflow.set_tag("git_sha", get_git_sha())
+    mlflow.set_tag("dataset_version", dataset_version)
+
     # Log params (nice to see in the sweep UI)
     mlflow.log_params(
         {
@@ -159,6 +210,20 @@ def main() -> None:
         raise ValueError("log metric name must match the name in AUTOML_DEFAULT_METRICS")
     mlflow.log_metric(average_precision_metric_name, ap)
     mlflow.log_metric(roc_auc_metric_name, auc)
+
+    if args.inference_data:
+        inference_df = pd.read_csv(args.inference_data)
+        drift_metrics = compute_drift_metrics(
+            original_df,
+            inference_df,
+            method=args.drift_method,
+            bins=args.drift_bins,
+        )
+        drift_metrics = {key: value for key, value in drift_metrics.items() if not np.isnan(value)}
+        if drift_metrics:
+            mlflow.log_metrics(drift_metrics)
+            mlflow.set_tag("drift_method", args.drift_method)
+            # TODO: pick drift thresholds and store batch summary stats for alerting.
 
     # Save model artifact + preprocessing assets
     out_dir = Path(args.output_dir)

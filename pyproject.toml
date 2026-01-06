@@ -27,6 +27,7 @@ dependencies = [
 dev = [
   "black>=24.10.0",
   "isort>=5.13.0",
+  "pip-audit>=2.7.0",
   "ruff>=0.7.0",
   "pytest>=8.3.0",
   "pytest-mock>=3.14.0",
@@ -72,5 +73,6 @@ line_length = 100
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
+  "cli: marks command-line interface tests with mocked Azure calls",
   "integration: marks tests that require Azure ML env vars or live resources",
 ]

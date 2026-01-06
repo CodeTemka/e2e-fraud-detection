@@ -5,5 +5,5 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - azure-ai-ml
-      - azure-identity
+      - azure-ai-ml==1.30.0
+      - azure-identity==1.25.1

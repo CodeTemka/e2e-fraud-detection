@@ -1,5 +1,6 @@
 """Utility to prepare Azure resources for the fraud detection demo."""
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -9,12 +10,31 @@ from azure.ai.ml.entities import Workspace
 from azure.identity import ClientSecretCredential
 
 from fraud_detection.config import get_settings  # noqa: E402
+from fraud_detection.training.compute import delete_compute, ensure_training_compute  # noqa: E402
 from fraud_detection.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cleanup-endpoints",
+        action="store_true",
+        help="Delete online endpoints tagged for this project before provisioning.",
+    )
+    parser.add_argument(
+        "--cleanup-compute",
+        action="store_true",
+        help="Delete compute clusters tagged for this project before provisioning.",
+    )
+    parser.add_argument(
+        "--cleanup-all",
+        action="store_true",
+        help="Delete tagged online endpoints and compute clusters before provisioning.",
+    )
+    args = parser.parse_args()
+
     settings = get_settings()
 
     az_path = shutil.which("az")
@@ -103,7 +123,7 @@ def main():
         return True
 
     # 4 Create workspace using service principal
-    def create_workspace():
+    def create_workspace() -> MLClient:
         if not service_principal_create():
             raise RuntimeError("Failed to create service principal.")
 
@@ -127,12 +147,13 @@ def main():
             resource_group_name=resource_group,
         )
 
+        resource_tags = settings.get_resource_tags()
         ws = Workspace(
             name=workspace_name,
             location=location,
             display_name="e2e-fraud-detection-ws",
             description="Workspace for e2e fraud detection demo",
-            tags=dict(purpose="demo"),
+            tags={**resource_tags, "purpose": "demo"},
         )
 
         try:
@@ -140,10 +161,45 @@ def main():
             logger.info("Workspace %s already exists.", workspace_name)
         except Exception:
             logger.info("Creating workspace %s...", workspace_name)
-            poller = ml_client.workspaces.begin_create(ws)
-            poller.result()
+            ml_client.workspaces.begin_create(ws).result()
 
-    create_workspace()
+        return ml_client
+
+    def _tags_match(actual: dict[str, str] | None, desired: dict[str, str]) -> bool:
+        if not desired:
+            return False
+        if not actual:
+            return False
+        return all(actual.get(key) == value for key, value in desired.items())
+
+    def cleanup_endpoints(ml_client: MLClient) -> None:
+        desired = settings.get_resource_tags()
+        for endpoint in ml_client.online_endpoints.list():
+            if _tags_match(endpoint.tags, desired):
+                logger.info("Deleting tagged endpoint: %s", endpoint.name)
+                ml_client.online_endpoints.begin_delete(name=endpoint.name).result()
+
+    def cleanup_compute(ml_client: MLClient) -> None:
+        desired = settings.get_resource_tags()
+        for compute in ml_client.compute.list():
+            if _tags_match(compute.tags, desired):
+                delete_compute(ml_client, name=compute.name, ignore_missing=True)
+
+    ml_client = create_workspace()
+    if args.cleanup_all or args.cleanup_endpoints:
+        cleanup_endpoints(ml_client)
+    if args.cleanup_all or args.cleanup_compute:
+        cleanup_compute(ml_client)
+
+    ensure_training_compute(
+        ml_client,
+        name=settings.get_training_compute(),
+        size=settings.instance_type,
+        min_instances=settings.compute_min_nodes,
+        max_instances=settings.compute_max_nodes,
+        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
+        tags=settings.get_resource_tags(),
+    )
 
 
 if __name__ == "__main__":

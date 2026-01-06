@@ -45,6 +45,19 @@ pip freeze > requirements.lock
 ```
 
 ## Usage
+Quickstart (CLI flows):
+
+1. Prep Azure resources and secrets.
+2. Register a dataset.
+3. Submit training jobs.
+4. Register + promote the best model.
+5. Deploy and invoke an endpoint.
+
+See the detailed runbook and architecture docs in `docs/`:
+- [Architecture overview](docs/ARCHITECTURE.md)
+- [Runbook](docs/RUNBOOK.md)
+- [Troubleshooting guide](docs/TROUBLESHOOTING.md)
+
 Prepare required resources for Azure ML:
 ```bash
 python scripts/az_prep.py
