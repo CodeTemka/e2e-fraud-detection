@@ -1,6 +1,7 @@
 """Command-line interface for the fraud detection toolkit."""
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Annotated
@@ -63,6 +64,7 @@ from fraud_detection.utils.logging import get_logger
 app = typer.Typer(help="Utilities to orchestrate Azure ML jobs")
 logger = get_logger(__name__)
 
+
 def _resolve_settings() -> Settings:
     return get_settings()
 
@@ -71,11 +73,28 @@ def _resolve_ml_client(settings: Settings) -> object:
     return get_ml_client(settings=settings)
 
 
+def _resolve_output_file(output_file: Path | None) -> Path | None:
+    if output_file:
+        return output_file
+    github_output = os.getenv("GITHUB_OUTPUT")
+    if github_output:
+        return Path(github_output)
+    return None
+
+
+def _write_github_outputs(output_file: Path, outputs: dict[str, str]) -> None:
+    lines = [f"{key}={outputs[key]}" for key in sorted(outputs)]
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with output_file.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
 def _parse_version(v: str | None) -> int:
     try:
         return int(v or 0)
     except (TypeError, ValueError):
         return 0
+
 
 def _normalize_algorithms(values: list[str] | None) -> list[str] | None:
     """Allow repeated -a and comma-seperated lists; return None if emtpy."""
@@ -568,15 +587,15 @@ def select_and_register_prod_model(
     else:
         typer.echo("No change: neither candidate beat current production metrics.")
 
-    if output_file:
-        lines = [
-            f"promoted={str(result.promoted).lower()}",
-            f"model_name={result.model_name or ''}",
-            f"model_version={result.model_version or ''}",
-            f"model_source={result.model_source or ''}",
-        ]
-        with output_file.open("a", encoding="utf-8") as handle:
-            handle.write("\n".join(lines) + "\n")
+    resolved_output = _resolve_output_file(output_file)
+    if resolved_output:
+        outputs = {
+            "model_name": result.model_name or "",
+            "model_source": result.model_source or "",
+            "model_version": result.model_version or "",
+            "promoted": str(result.promoted).lower(),
+        }
+        _write_github_outputs(resolved_output, outputs)
 
 @app.command()
 def endpoint_create():

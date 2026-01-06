@@ -1,9 +1,0 @@
-name: fraud-detection
-channels:
-  - conda-forge
-dependencies:
-  - python=3.11
-  - pip>=24
-  - ipykernel
-  - pip:
-      - -e ".[dev]"

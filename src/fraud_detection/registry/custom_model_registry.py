@@ -9,7 +9,7 @@ from azure.ai.ml.entities import Model
 from azure.core.exceptions import HttpResponseError
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import Settings, get_settings
+from fraud_detection.config import Settings, build_idempotency_key, get_git_sha, get_settings
 from fraud_detection.registry.automl_registry import job_artifact_uri, mlflow_tracking_uri
 from fraud_detection.registry.best_runs_by_metric import BestRun, best_run_by_metric
 from fraud_detection.registry.prod_model_by_metric import current_prod_model_metric
@@ -130,12 +130,15 @@ def register_custom_model_from_run(
     alias: str | None = "production",
     extra_tags: dict[str, str] | None = None,
 ) -> Model:
+    idempotency_key = build_idempotency_key(settings.custom_train_exp, metric)
     tags = {
         "experiment_name": settings.custom_train_exp,
         "selected_metric": metric,
         "metric_name": metric,
         "metric_value": str(metric_value),
         "run_id": run_id,
+        "git_sha": get_git_sha(short=False),
+        "idempotency_key": idempotency_key,
         "promotion": str(promotion).lower(),
         "promotion_decision": "promote" if promotion else "stage",
         "model_source": "custom",

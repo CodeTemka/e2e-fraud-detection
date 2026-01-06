@@ -8,7 +8,7 @@ and unit tests.
 - Azure ML AutoML presets for recall-first and accuracy-first LightGBM models.
 - Reusable utilities for Azure authentication and MLflow model registration.
 - Typer-based CLI (`fraud-cli`) for submitting jobs and registering the best child runs.
-- Conda environment + `pyproject.toml` for reproducible installs.
+- `pyproject.toml`-based dependency management for reproducible installs.
 - GitHub Actions workflow for linting (Ruff) and testing (Pytest).
 
 ## Repository structure
@@ -24,24 +24,16 @@ and unit tests.
 
 ## Setup
 ```bash
-# 1) Create environment (Conda recommended)
-conda env create -f environment.yml
-conda activate fraud-detection
+# 1) Create a virtual environment
+python -m venv .venv
+source .venv/bin/activate
 
 # 2) Provide credentials
 cp .env.example .env
 # edit the values for your credentials
 
-# 3) Install pinned dependencies (CI/reproducible installs)
-pip install -r requirements.lock
-
-# 4) Install the project (already handled by the env file, but works standalone too)
+# 3) Install the project with dev tooling
 pip install -e .[dev]
-```
-
-To refresh the lockfile after updating dependencies, install the desired versions and run:
-```bash
-pip freeze > requirements.lock
 ```
 
 ## Usage
