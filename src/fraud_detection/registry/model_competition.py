@@ -7,7 +7,7 @@ from azure.ai.ml import MLClient
 from azure.core.exceptions import HttpResponseError
 
 from fraud_detection.azure.client import get_ml_client
-from fraud_detection.config import build_idempotency_key, get_git_sha, Settings, get_settings
+from fraud_detection.config import Settings, build_idempotency_key, get_git_sha, get_settings
 from fraud_detection.registry.automl_registry import mlflow_tracking_uri, register_model_from_run
 from fraud_detection.registry.best_runs_by_metric import BestRun, best_run_by_metric
 from fraud_detection.registry.custom_model_registry import (

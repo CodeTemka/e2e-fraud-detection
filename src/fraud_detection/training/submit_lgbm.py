@@ -15,10 +15,9 @@ from azure.ai.ml.sweep import (
     SamplingAlgorithm,
     Uniform,
 )
-
-from fraud_detection.azure.client import get_ml_client
 from azure.core.exceptions import ResourceNotFoundError
 
+from fraud_detection.azure.client import get_ml_client
 from fraud_detection.config import (
     ROOT_DIR,
     Settings,
