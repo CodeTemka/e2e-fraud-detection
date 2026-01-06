@@ -75,3 +75,32 @@ def test_register_best_custom_model_skips_when_not_better(monkeypatch):
 
     assert result.promoted is False
     assert result.model_name is None
+
+
+def test_register_best_custom_model_promotes_when_no_prod_metric(monkeypatch):
+    def fake_best_run_by_metric(*, metric, direction, settings, experiment_name):
+        return BestRun(experiment_name=experiment_name, run_id="run-555", metric_name=metric, metric_value=0.42)
+
+    def fake_register_custom_model_from_run(*_args, **_kwargs):
+        return SimpleNamespace(name="production-model", version="8")
+
+    class FakeSettings:
+        custom_train_exp = "custom-train"
+        prod_model_name = "production-model"
+        promotion_metric_epsilon = 0.0
+
+    monkeypatch.setattr(custom_registry, "best_run_by_metric", fake_best_run_by_metric)
+    monkeypatch.setattr(custom_registry, "_resolve_prod_metric", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(custom_registry, "register_custom_model_from_run", fake_register_custom_model_from_run)
+    monkeypatch.setattr(custom_registry, "mlflow_tracking_uri", lambda *_: None)
+
+    result = custom_registry.register_best_custom_model(
+        metric="AUC_macro",
+        ml_client="ml-client",
+        settings=FakeSettings(),
+        experiment="custom-train",
+    )
+
+    assert result.promoted is True
+    assert result.model_name == "production-model"
+    assert result.model_version == "8"

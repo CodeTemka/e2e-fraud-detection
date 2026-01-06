@@ -1,8 +1,13 @@
+import os
 from types import SimpleNamespace
+
+import pytest
 
 from typer.testing import CliRunner
 
 from fraud_detection import cli
+from fraud_detection.azure.client import get_ml_client
+from fraud_detection.config import get_settings
 from fraud_detection.registry.automl_registry import list_completed_jobs
 from fraud_detection.training.automl import AutoMLJobConfig, create_automl_job
 from fraud_detection.training.submit_lgbm import (
@@ -17,6 +22,19 @@ from fraud_detection.training.submit_xgb import (
 )
 
 runner = CliRunner()
+
+INTEGRATION_ENV_VARS = (
+    "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET",
+    "AZURE_TENANT_ID",
+    "AZURE_SUBSCRIPTION_ID",
+    "AZURE_RESOURCE_GROUP",
+    "AZURE_WORKSPACE_NAME",
+)
+
+
+def _missing_integration_env() -> list[str]:
+    return [var for var in INTEGRATION_ENV_VARS if not os.getenv(var)]
 
 
 def test_create_automl_job_builds_expected_job():
@@ -172,3 +190,16 @@ def test_create_lgbm_sweep_job_builds_expected_job():
 
     assert job.experiment_name == "lgbm-exp"
     assert job.compute == "cpu-cluster"
+
+
+@pytest.mark.integration
+def test_list_completed_jobs_integration():
+    missing = _missing_integration_env()
+    if missing:
+        pytest.skip(f"Missing Azure ML integration env vars: {', '.join(missing)}")
+
+    settings = get_settings()
+    ml_client = get_ml_client(settings=settings)
+
+    result = list_completed_jobs(ml_client, experiments=[settings.automl_train_exp])
+    assert isinstance(result, dict)
