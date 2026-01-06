@@ -240,14 +240,16 @@ def submit_automl(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
+    idle_time_before_scale_down = getattr(settings, "compute_idle_time_before_scale_down", 900)
+    tags = settings.get_resource_tags() if hasattr(settings, "get_resource_tags") else {}
     ensure_training_compute(
         ml_client,
         name=compute_target,
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
-        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
-        tags=settings.get_resource_tags(),
+        idle_time_before_scale_down=idle_time_before_scale_down,
+        tags=tags,
     )
 
     allowed_algorithms = _normalize_algorithms(algorithms)
@@ -304,14 +306,16 @@ def submit_xgb_sweep(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
+    idle_time_before_scale_down = getattr(settings, "compute_idle_time_before_scale_down", 900)
+    tags = settings.get_resource_tags() if hasattr(settings, "get_resource_tags") else {}
     ensure_training_compute(
         ml_client,
         name=compute_target,
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
-        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
-        tags=settings.get_resource_tags(),
+        idle_time_before_scale_down=idle_time_before_scale_down,
+        tags=tags,
     )
 
     try:
@@ -375,14 +379,16 @@ def submit_lgbm_sweep(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
+    idle_time_before_scale_down = getattr(settings, "compute_idle_time_before_scale_down", 900)
+    tags = settings.get_resource_tags() if hasattr(settings, "get_resource_tags") else {}
     ensure_training_compute(
         ml_client,
         name=compute_target,
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
-        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
-        tags=settings.get_resource_tags(),
+        idle_time_before_scale_down=idle_time_before_scale_down,
+        tags=tags,
     )
 
     try:
