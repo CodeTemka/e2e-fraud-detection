@@ -104,7 +104,7 @@ def ensure_compute(
         min_instances=min_instances,
         max_instances=max_instances,
         idle_time_before_scale_down=idle_time_before_scale_down,
-        tags=tags or {"project": "fraud-detection"},
+        tags=tags or {},
     )
 
     def _create() -> Any:
@@ -133,6 +133,7 @@ def ensure_training_compute(
     size: str = "Standard_D4s_v3",
     min_instances: int = 0,
     max_instances: int = 2,
+    idle_time_before_scale_down: int = 900,
     tags: dict[str, str] | None = None,
 ) -> Any:
     """Ensure compute for training jobs is present."""
@@ -143,6 +144,7 @@ def ensure_training_compute(
         size=size,
         min_instances=min_instances,
         max_instances=max_instances,
+        idle_time_before_scale_down=idle_time_before_scale_down,
         tags=tags,
     )
 

@@ -246,6 +246,8 @@ def submit_automl(
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
+        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
+        tags=settings.get_resource_tags(),
     )
 
     allowed_algorithms = _normalize_algorithms(algorithms)
@@ -308,6 +310,8 @@ def submit_xgb_sweep(
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
+        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
+        tags=settings.get_resource_tags(),
     )
 
     try:
@@ -377,6 +381,8 @@ def submit_lgbm_sweep(
         size=settings.instance_type,
         min_instances=settings.compute_min_nodes,
         max_instances=settings.compute_max_nodes,
+        idle_time_before_scale_down=settings.compute_idle_time_before_scale_down,
+        tags=settings.get_resource_tags(),
     )
 
     try:
