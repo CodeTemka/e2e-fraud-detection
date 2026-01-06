@@ -17,6 +17,11 @@ DEFAULT_SUBSCRIPTION_ID = "aa4acb09-3611-4169-8504-1e68ad04a40f"
 DEFAULT_RESOURCE_GROUP = "e2e-fraud-detection"
 DEFAULT_WORKSPACE_NAME = "e2e-fraud-detection-ws"
 DEFAULT_LOCATION = "eastasia"
+# TODO: Define default budget limits and tag names.
+DEFAULT_COST_CENTER_TAG_KEY = "cost_center"
+DEFAULT_PROJECT_TAG_KEY = "project"
+DEFAULT_COST_CENTER_TAG_VALUE = "unknown"
+DEFAULT_PROJECT_TAG_VALUE = "e2e-fraud-detection"
 
 
 class Settings(BaseSettings):
@@ -89,6 +94,24 @@ class Settings(BaseSettings):
     instance_count: int = 1
     compute_min_nodes: int = 0
     compute_max_nodes: int = 2
+    compute_idle_time_before_scale_down: int = 900
+
+    cost_center_tag_key: str = Field(
+        default=DEFAULT_COST_CENTER_TAG_KEY,
+        validation_alias=AliasChoices("COST_CENTER_TAG_KEY"),
+    )
+    project_tag_key: str = Field(
+        default=DEFAULT_PROJECT_TAG_KEY,
+        validation_alias=AliasChoices("PROJECT_TAG_KEY"),
+    )
+    cost_center_tag_value: str = Field(
+        default=DEFAULT_COST_CENTER_TAG_VALUE,
+        validation_alias=AliasChoices("COST_CENTER"),
+    )
+    project_tag_value: str = Field(
+        default=DEFAULT_PROJECT_TAG_VALUE,
+        validation_alias=AliasChoices("PROJECT_NAME"),
+    )
 
     # XGBoost sweep environment
     xgb_env_name: str = Field(
@@ -203,6 +226,12 @@ class Settings(BaseSettings):
                 "Deployment instance type is not configured. Set DEPLOYMENT_INSTANCE_TYPE."
             )
         return instance_type
+
+    def get_resource_tags(self) -> dict[str, str]:
+        return {
+            self.project_tag_key: self.project_tag_value,
+            self.cost_center_tag_key: self.cost_center_tag_value,
+        }
 
 
 def slugify(value: str) -> str:
