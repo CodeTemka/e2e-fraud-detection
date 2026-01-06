@@ -211,14 +211,6 @@ class Settings(BaseSettings):
             raise ValueError("Training compute is not configured. Set TRAINING_COMPUTE.")
         return compute
 
-    def get_deployment_compute(self) -> str:
-        compute = (self.deployment_compute or "").strip()
-        if not compute:
-            raise ValueError(
-                "Deployment compute is not configured. Set DEPLOYMENT_COMPUTE."
-            )
-        return compute
-
     def get_deployment_instance_type(self) -> str:
         instance_type = (self.deployment_instance_type or "").strip()
         if not instance_type:

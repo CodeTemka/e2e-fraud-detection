@@ -199,9 +199,9 @@ def select_and_register_prod_model(
     mlflow_tracking_uri(ml_client)
 
     direction = _metric_direction(metric)
-    epsilon = cfg.promotion_metric_epsilon
-    min_threshold = cfg.promotion_min_metric
-    delta_threshold = cfg.promotion_metric_delta
+    epsilon = getattr(cfg, "promotion_metric_epsilon", 0.0)
+    min_threshold = getattr(cfg, "promotion_min_metric", None)
+    delta_threshold = getattr(cfg, "promotion_metric_delta", 0.0)
 
     automl_candidate = _try_best_run(
         metric=metric,
