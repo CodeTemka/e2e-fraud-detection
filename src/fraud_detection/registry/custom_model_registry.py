@@ -37,7 +37,14 @@ def _metric_direction(metric: str) -> str:
     return "max"
 
 
-def _is_better(best: float, current: float, *, direction: str, epsilon: float, delta: float) -> bool:
+def _is_better(
+    best: float,
+    current: float,
+    *,
+    direction: str,
+    epsilon: float,
+    delta: float = 0.0,
+) -> bool:
     required_delta = max(float(epsilon), float(delta))
     if direction == "min":
         return best < (current - required_delta)
@@ -168,9 +175,9 @@ def register_best_custom_model(
     best = best_run_by_metric(metric=metric, direction=direction, settings=cfg, experiment_name=experiment_name)
     prod_metric = _resolve_prod_metric(ml_client, metric, settings=cfg)
 
-    epsilon = cfg.promotion_metric_epsilon
-    min_threshold = cfg.promotion_min_metric
-    delta_threshold = cfg.promotion_metric_delta
+    epsilon = getattr(cfg, "promotion_metric_epsilon", 0.0)
+    min_threshold = getattr(cfg, "promotion_min_metric", None)
+    delta_threshold = getattr(cfg, "promotion_metric_delta", 0.0)
     if prod_metric is None:
         should_promote = _meets_min_threshold(best.metric_value, direction=direction, min_threshold=min_threshold)
     else:
@@ -199,23 +206,30 @@ def register_best_custom_model(
         },
     )
 
-    model_name = cfg.prod_model_name if should_promote else _shadow_model_name(best.run_id)
-    stage = "production" if should_promote else "staging"
-    alias = "production" if should_promote else "staging"
+    if not should_promote:
+        return PromotionResult(
+            promoted=False,
+            model_name=None,
+            model_version=None,
+            best_run=best,
+            best_metric=best.metric_value,
+            prod_metric=prod_metric,
+        )
+
     registered = register_custom_model_from_run(
         ml_client,
-        model_name=model_name,
+        model_name=cfg.prod_model_name,
         run_id=best.run_id,
         metric=metric,
         metric_value=best.metric_value,
         settings=cfg,
-        promotion=should_promote,
-        stage=stage,
-        alias=alias,
+        promotion=True,
+        stage="production",
+        alias="production",
     )
 
     return PromotionResult(
-        promoted=should_promote,
+        promoted=True,
         model_name=registered.name,
         model_version=str(registered.version),
         best_run=best,
