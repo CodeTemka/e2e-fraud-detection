@@ -76,3 +76,6 @@ markers = [
   "cli: marks command-line interface tests with mocked Azure calls",
   "integration: marks tests that require Azure ML env vars or live resources",
 ]
+
+[tool.pip-audit]
+skip-editable = true
