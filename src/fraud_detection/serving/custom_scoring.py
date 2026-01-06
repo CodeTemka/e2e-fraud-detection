@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ class ModelAssets:
 MODEL_ASSETS: ModelAssets | None = None
 DEFAULT_ALERT_CAP = 100
 APP_INSIGHTS_CONFIGURED = False
+VERBOSE_LOGGING_ENV = "FRAUD_LOG_VERBOSE"
 
 
 def _load_metadata(model_dir: Path) -> dict[str, Any]:
@@ -131,6 +133,30 @@ def _parse_alert_cap(raw_data: dict[str, Any] | None) -> int | None:
         return max(int(cap), 0)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Invalid alert_cap '{cap}'. Must be an integer.") from exc
+
+
+def _parse_request_id(raw_data: Any) -> str:
+    if raw_data is None:
+        return str(uuid.uuid4())
+
+    parsed = raw_data
+    if isinstance(raw_data, (str, bytes)):
+        try:
+            parsed = json.loads(raw_data)
+        except json.JSONDecodeError:
+            return str(uuid.uuid4())
+
+    if isinstance(parsed, dict):
+        for key in ("request_id", "requestId", "correlation_id", "correlationId"):
+            value = parsed.get(key)
+            if value:
+                return str(value)
+    return str(uuid.uuid4())
+
+
+def _is_verbose_logging_enabled() -> bool:
+    value = os.environ.get(VERBOSE_LOGGING_ENV, "")
+    return value.lower() in {"1", "true", "yes", "on"}
 
 
 def _coerce_records(raw_data: Any) -> tuple[pd.DataFrame, int | None]:
@@ -270,22 +296,23 @@ def run(raw_data: Any) -> dict[str, Any]:
         raise RuntimeError("Model assets not initialized. Call init() first.")
 
     start_time = time.perf_counter()
+    request_id = _parse_request_id(raw_data)
     df, alert_cap_override = _coerce_records(raw_data)
     df, row_ids = _extract_row_ids(df)
     features = _prepare_features(df, MODEL_ASSETS)
+    verbose_logging = _is_verbose_logging_enabled()
 
     if features.empty:
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(
-            "inference_empty",
-            extra={
-                "batch": len(df),
-                "alert_cap_override": alert_cap_override,
-                "alert_cap": 0,
-                "num_alerts": 0,
-                "duration_ms": duration_ms,
-            },
-        )
+        log_payload = {
+            "request_id": request_id,
+            "record_count": len(df),
+            "alert_cap_override": alert_cap_override,
+            "alert_cap": 0,
+            "num_alerts": 0,
+            "duration_ms": duration_ms,
+        }
+        logger.info("inference_empty", extra=log_payload)
         response = {
             "predictions": [],
             "probabilities": [],
@@ -304,20 +331,24 @@ def run(raw_data: Any) -> dict[str, Any]:
     predictions, threshold, num_alerts = apply_top_k_threshold(probabilities, alert_cap)
 
     duration_ms = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        "inference",
-        extra={
-            "batch": len(df),
-            "avg_score": float(np.mean(probabilities)),
-            "min_score": float(np.min(probabilities)),
-            "max_score": float(np.max(probabilities)),
-            "alert_cap_override": alert_cap_override,
-            "alert_cap": alert_cap,
-            "num_alerts": num_alerts,
-            "threshold": threshold,
-            "duration_ms": duration_ms,
-        },
-    )
+    log_payload = {
+        "request_id": request_id,
+        "record_count": len(df),
+        "alert_cap_override": alert_cap_override,
+        "alert_cap": alert_cap,
+        "num_alerts": num_alerts,
+        "threshold": threshold,
+        "duration_ms": duration_ms,
+    }
+    if verbose_logging:
+        log_payload.update(
+            {
+                "avg_score": float(np.mean(probabilities)),
+                "min_score": float(np.min(probabilities)),
+                "max_score": float(np.max(probabilities)),
+            }
+        )
+    logger.info("inference", extra=log_payload)
 
     response = {
         "predictions": predictions,
