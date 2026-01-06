@@ -138,6 +138,14 @@ class Settings(BaseSettings):
         default=1e-6,
         validation_alias=AliasChoices("PROMOTION_METRIC_EPSILON"),
     )
+    promotion_min_metric: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PROMOTION_MIN_METRIC"),
+    )
+    promotion_metric_delta: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices("PROMOTION_METRIC_DELTA"),
+    )
 
     # Default smoke test json
     smoke_test: Path = ROOT_DIR / "sample_request.json"

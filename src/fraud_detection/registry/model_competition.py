@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import mlflow
 from azure.ai.ml import MLClient
 from azure.core.exceptions import HttpResponseError
 
@@ -91,6 +92,27 @@ def _find_existing_model(
     return None
 
 
+def _get_run_tag(run_id: str, tag_name: str) -> str | None:
+    try:
+        run = mlflow.get_run(run_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Failed reading run tag", extra={"run_id": run_id, "tag": tag_name, "error": str(exc)})
+        return None
+    return run.data.tags.get(tag_name)
+
+
+def _dataset_version_for_run(run_id: str) -> str:
+    return _get_run_tag(run_id, "dataset_version") or "unknown"
+
+
+def _meets_min_threshold(metric_value: float, *, direction: str, min_threshold: float | None) -> bool:
+    if min_threshold is None:
+        return True
+    if direction == "min":
+        return metric_value <= min_threshold
+    return metric_value >= min_threshold
+
+
 def _current_prod_metric_from_tags(ml_client: MLClient, metric: str, *, settings: Settings) -> float | None:
     latest = _latest_model_asset(ml_client, settings.prod_model_name)
     if latest is None:
@@ -178,6 +200,8 @@ def select_and_register_prod_model(
 
     direction = _metric_direction(metric)
     epsilon = cfg.promotion_metric_epsilon
+    min_threshold = cfg.promotion_min_metric
+    delta_threshold = cfg.promotion_metric_delta
 
     automl_candidate = _try_best_run(
         metric=metric,
@@ -208,13 +232,35 @@ def select_and_register_prod_model(
             "custom_metric": custom_metric,
             "prod_metric": prod_metric,
             "epsilon": epsilon,
+            "min_threshold": min_threshold,
+            "delta_threshold": delta_threshold,
         },
     )
 
     contenders: list[Candidate] = []
-    if automl_candidate and (prod_metric is None or _is_better(automl_metric, prod_metric, direction=direction, epsilon=epsilon)):
+    if automl_candidate and _meets_min_threshold(
+        automl_metric,
+        direction=direction,
+        min_threshold=min_threshold,
+    ) and (prod_metric is None or _is_better(
+        automl_metric,
+        prod_metric,
+        direction=direction,
+        epsilon=epsilon,
+        delta=delta_threshold,
+    )):
         contenders.append(automl_candidate)
-    if custom_candidate and (prod_metric is None or _is_better(custom_metric, prod_metric, direction=direction, epsilon=epsilon)):
+    if custom_candidate and _meets_min_threshold(
+        custom_metric,
+        direction=direction,
+        min_threshold=min_threshold,
+    ) and (prod_metric is None or _is_better(
+        custom_metric,
+        prod_metric,
+        direction=direction,
+        epsilon=epsilon,
+        delta=delta_threshold,
+    )):
         contenders.append(custom_candidate)
 
     if not contenders:
@@ -244,11 +290,13 @@ def select_and_register_prod_model(
         "metric_value": str(winner.best_run.metric_value),
         "run_id": winner.best_run.run_id,
         "promotion": "true",
+        "promotion_decision": "promote",
         "model_source": winner.source,
         "stage": "production",
         "alias": "production",
         "experiment_name": winner.experiment_name,
         "idempotency_key": idempotency_key,
+        "dataset_version": _dataset_version_for_run(winner.best_run.run_id),
     }
 
     existing_model = _find_existing_model(
