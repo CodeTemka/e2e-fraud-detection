@@ -28,6 +28,13 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      CANARY_TRAFFIC_PERCENT: "10"
+      CANARY_SHIFT_STEP: "20"
+      CANARY_SHIFT_WAIT_SECONDS: "0"
+      SMOKE_REPEAT: "5"
+      # TODO: define thresholds for rollback (latency/error rate) based on production baselines.
+      SMOKE_LATENCY_THRESHOLD_MS: "500"
+      SMOKE_ERROR_RATE_THRESHOLD: "0.05"
 
     steps:
       - name: Checkout repository at CI commit
@@ -70,11 +77,26 @@ jobs:
         run: |
           python -m fraud_detection.training.pipeline submit
 
+      - name: Deploy model with canary traffic
+        run: |
+          python -m fraud_detection.cli deploy --traffic "${CANARY_TRAFFIC_PERCENT}"
+
       - name: Smoke test online endpoint
         id: smoke_test
         continue-on-error: true
         run: |
-          python -m fraud_detection.cli serve-invoke
+          python -m fraud_detection.cli serve-invoke \
+            --repeat "${SMOKE_REPEAT}" \
+            --latency-threshold-ms "${SMOKE_LATENCY_THRESHOLD_MS}" \
+            --error-rate-threshold "${SMOKE_ERROR_RATE_THRESHOLD}"
+
+      - name: Gradually shift traffic after successful smoke test
+        if: steps.smoke_test.outcome == 'success'
+        run: |
+          python -m fraud_detection.cli traffic-shift \
+            --target 100 \
+            --step "${CANARY_SHIFT_STEP}" \
+            --wait-seconds "${CANARY_SHIFT_WAIT_SECONDS}"
 
       - name: Roll back traffic if smoke test fails
         if: steps.smoke_test.outcome == 'failure'

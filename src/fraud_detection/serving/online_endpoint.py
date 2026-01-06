@@ -1,6 +1,7 @@
 """Helpers for Azure ML managed online endpoints."""
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import floor
@@ -84,9 +85,17 @@ def update_traffic(ml_client: MLClient, *, endpoint_name: str, traffic: dict[str
     _validate_traffic(traffic)
 
     endpoint = ml_client.online_endpoints.get(endpoint_name)
+    previous = dict(endpoint.traffic or {})
     endpoint.traffic = traffic
 
-    logger.info("Updating endpoint traffic", extra={"endpoint_name": endpoint_name, "traffic": traffic})
+    logger.info(
+        "Updating endpoint traffic",
+        extra={
+            "endpoint_name": endpoint_name,
+            "previous_traffic": previous,
+            "traffic": traffic,
+        },
+    )
     ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 
 
@@ -118,15 +127,73 @@ def _build_initial_traffic(
     deployment_name: str,
     low_traffic_percent: int,
 ) -> dict[str, int]:
-    remaining = 100 - low_traffic_percent
+    return _build_canary_traffic(
+        current_traffic=current_traffic,
+        deployment_name=deployment_name,
+        deployment_percent=low_traffic_percent,
+    )
+
+
+def _build_canary_traffic(
+    *,
+    current_traffic: Mapping[str, int],
+    deployment_name: str,
+    deployment_percent: int,
+) -> dict[str, int]:
+    if deployment_percent >= 100:
+        return {deployment_name: 100}
+
+    remaining = 100 - deployment_percent
     existing = {name: pct for name, pct in current_traffic.items() if name != deployment_name}
     if not existing:
         return {deployment_name: 100}
 
     total_existing = sum(existing.values())
     traffic = _allocate_remaining_traffic(existing=existing, remaining=remaining, total_existing=total_existing)
-    traffic[deployment_name] = low_traffic_percent
+    traffic[deployment_name] = deployment_percent
     return traffic
+
+
+def shift_traffic(
+    ml_client: MLClient,
+    *,
+    endpoint_name: str,
+    deployment_name: str,
+    target_percent: int = 100,
+    step_percent: int = 10,
+    wait_seconds: int = 0,
+) -> dict[str, int]:
+    """Gradually shift traffic toward a deployment in steps."""
+    if target_percent <= 0 or target_percent > 100:
+        raise ValueError("target_percent must be between 1 and 100")
+    if step_percent <= 0 or step_percent > 100:
+        raise ValueError("step_percent must be between 1 and 100")
+    if wait_seconds < 0:
+        raise ValueError("wait_seconds must be >= 0")
+
+    endpoint = ml_client.online_endpoints.get(endpoint_name)
+    current_traffic = dict(endpoint.traffic or {})
+    current_percent = current_traffic.get(deployment_name, 0)
+    if current_traffic and deployment_name not in current_traffic:
+        raise ValueError(f"deployment '{deployment_name}' is not in the current traffic map")
+    if target_percent < current_percent:
+        raise ValueError("target_percent must be >= the current traffic percent for the deployment")
+
+    steps = list(range(current_percent + step_percent, target_percent + 1, step_percent))
+    if not steps or steps[-1] != target_percent:
+        steps.append(target_percent)
+
+    latest = current_traffic
+    for step in steps:
+        latest = _build_canary_traffic(
+            current_traffic=current_traffic,
+            deployment_name=deployment_name,
+            deployment_percent=step,
+        )
+        update_traffic(ml_client, endpoint_name=endpoint_name, traffic=latest)
+        if wait_seconds:
+            time.sleep(wait_seconds)
+    return latest
 
 
 def _allocate_remaining_traffic(
@@ -182,5 +249,6 @@ __all__ = [
     "delete_endpoint",
     "update_traffic",
     "set_initial_traffic",
+    "shift_traffic",
     "DEFAULT_AUTH_MODE",
 ]

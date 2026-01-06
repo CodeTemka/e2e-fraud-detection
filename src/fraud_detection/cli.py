@@ -1,6 +1,7 @@
 """Command-line interface for the fraud detection toolkit."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -30,7 +31,12 @@ from fraud_detection.registry.model_competition import (
 )
 from fraud_detection.registry.prod_model_by_metric import register_prod_model
 from fraud_detection.serving.deploy import deploy_model, resolve_scoring_environment
-from fraud_detection.serving.online_endpoint import create_endpoint, delete_endpoint
+from fraud_detection.serving.online_endpoint import (
+    create_endpoint,
+    delete_endpoint,
+    set_initial_traffic,
+    shift_traffic,
+)
 from fraud_detection.training.automl import (
     SUPPORTED_CLASSIFICATION_METRICS,
     automl_job_builder,
@@ -588,7 +594,17 @@ def endpoint_delete():
 
 
 @app.command()
-def deploy():
+def deploy(
+    traffic: Annotated[
+        int | None,
+        typer.Option(
+            "--traffic",
+            help="Initial canary traffic percent for the deployment (1-99).",
+            min=1,
+            max=99,
+        ),
+    ] = None,
+):
     """Deploy a registered model to a managed online endpoint."""
     settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
@@ -639,9 +655,72 @@ def deploy():
     )
     typer.echo(f"Deployed model '{model_name}' to endpoint '{endpoint_name}' as deployment '{deployment.name}'.")
 
+    if traffic is not None:
+        traffic_map = set_initial_traffic(
+            ml_client,
+            endpoint_name=endpoint_name,
+            deployment_name=deployment_name,
+            low_traffic_percent=traffic,
+        )
+        typer.echo(f"Updated traffic for endpoint '{endpoint_name}': {traffic_map}")
+
 
 @app.command()
-def serve_invoke():
+def traffic_shift(
+    target: Annotated[
+        int,
+        typer.Option("--target", help="Target traffic percent for the deployment.", min=1, max=100),
+    ] = 100,
+    step: Annotated[
+        int,
+        typer.Option("--step", help="Percent to shift in each step.", min=1, max=100),
+    ] = 10,
+    wait_seconds: Annotated[
+        int,
+        typer.Option("--wait-seconds", help="Seconds to wait between traffic shifts.", min=0),
+    ] = 0,
+    deployment: Annotated[
+        str | None,
+        typer.Option("--deployment", help="Deployment name to shift traffic toward (defaults to config)."),
+    ] = None,
+):
+    """Gradually shift traffic to a deployment."""
+    settings = _resolve_settings()
+    ml_client = _resolve_ml_client(settings)
+    deployment_name = deployment or settings.deployment_name
+    traffic = shift_traffic(
+        ml_client,
+        endpoint_name=settings.endpoint_name,
+        deployment_name=deployment_name,
+        target_percent=target,
+        step_percent=step,
+        wait_seconds=wait_seconds,
+    )
+    typer.echo(
+        f"Shifted traffic for endpoint '{settings.endpoint_name}' toward '{deployment_name}': {traffic}"
+    )
+
+
+@app.command()
+def serve_invoke(
+    repeat: Annotated[
+        int,
+        typer.Option("--repeat", help="Number of smoke requests to send.", min=1),
+    ] = 1,
+    latency_threshold_ms: Annotated[
+        int | None,
+        typer.Option("--latency-threshold-ms", help="Fail if average latency exceeds this threshold.", min=1),
+    ] = None,
+    error_rate_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--error-rate-threshold",
+            help="Fail if the error rate exceeds this value (0-1).",
+            min=0.0,
+            max=1.0,
+        ),
+    ] = None,
+):
     """Invoke a managed online endpoint deployment (smoke test)."""
     settings = _resolve_settings()
     ml_client = _resolve_ml_client(settings)
@@ -654,13 +733,45 @@ def serve_invoke():
     except ResourceNotFoundError as exc:
         raise typer.BadParameter(f"Endpoint '{endpoint_name}' does not exist") from exc
 
-    response = ml_client.online_endpoints.invoke(
-        endpoint_name=endpoint_name,
-        deployment_name=deployment_name,
-        request_file=str(request_file),
+    errors = 0
+    latencies: list[float] = []
+    last_response = None
+    for _ in range(repeat):
+        start = time.monotonic()
+        try:
+            response = ml_client.online_endpoints.invoke(
+                endpoint_name=endpoint_name,
+                deployment_name=deployment_name,
+                request_file=str(request_file),
+            )
+            last_response = response
+            latencies.append((time.monotonic() - start) * 1000)
+        except Exception as exc:  # noqa: BLE001 - azure ml raises broad exceptions
+            errors += 1
+            logger.error("Smoke test request failed", extra={"error": str(exc)})
+
+    if last_response is not None:
+        typer.echo(last_response)
+
+    total = repeat
+    error_rate = errors / total
+    avg_latency = sum(latencies) / len(latencies) if latencies else float("inf")
+    logger.info(
+        "Smoke test metrics",
+        extra={
+            "endpoint_name": endpoint_name,
+            "deployment_name": deployment_name,
+            "requests": total,
+            "errors": errors,
+            "error_rate": error_rate,
+            "avg_latency_ms": avg_latency,
+        },
     )
 
-    typer.echo(response)
+    if latency_threshold_ms is not None and avg_latency > latency_threshold_ms:
+        raise typer.Exit(code=1)
+    if error_rate_threshold is not None and error_rate > error_rate_threshold:
+        raise typer.Exit(code=1)
 
 
 def run():
