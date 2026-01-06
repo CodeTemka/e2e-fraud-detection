@@ -49,6 +49,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch PR base and head commits
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          base_repo="${{ github.event.pull_request.base.repo.full_name }}"
+          head_repo="${{ github.event.pull_request.head.repo.full_name }}"
+
+          git fetch --no-tags --depth=1 \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${base_repo}.git" \
+            "${base_sha}"
+
+          if [ "${head_repo}" = "${base_repo}" ]; then
+            git fetch --no-tags --depth=1 origin "${head_sha}"
+          else
+            git fetch --no-tags --depth=1 \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${head_repo}.git" \
+              "${head_sha}"
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -80,4 +104,5 @@ jobs:
       - name: Secret scanning
         uses: gitleaks/gitleaks-action@v2
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
