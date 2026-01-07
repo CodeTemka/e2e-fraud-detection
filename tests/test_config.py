@@ -27,7 +27,7 @@ def test_settings_loads_env(monkeypatch):
     assert settings.dataset_name == "azureml:dataset:1"
 
 
-def test_settings_allows_missing_azure_env(monkeypatch):
+def test_settings_raises_on_missing_azure_env(monkeypatch):
     monkeypatch.delenv("SUBSCRIPTION_ID", raising=False)
     monkeypatch.delenv("RESOURCE_GROUP", raising=False)
     monkeypatch.delenv("WORKSPACE_NAME", raising=False)
@@ -37,8 +37,15 @@ def test_settings_allows_missing_azure_env(monkeypatch):
 
     importlib.reload(config)
     config.get_settings.cache_clear()
-    settings = config.get_settings()
+    
+    # Needs pytest.raises(ValidationError) but we need to import ValidationError
+    from pydantic import ValidationError
+    import pytest
 
-    assert settings.subscription_id == config.DEFAULT_SUBSCRIPTION_ID
-    assert settings.resource_group == config.DEFAULT_RESOURCE_GROUP
-    assert settings.workspace_name == config.DEFAULT_WORKSPACE_NAME
+    with pytest.raises(ValidationError) as excinfo:
+        config.get_settings()
+    
+    errors = str(excinfo.value)
+    assert "subscription_id" in errors
+    assert "resource_group" in errors
+    assert "workspace_name" in errors

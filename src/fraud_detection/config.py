@@ -13,9 +13,9 @@ from fraud_detection.data.data_validation import ValidationOptions, validate_cre
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
-DEFAULT_SUBSCRIPTION_ID = "aa4acb09-3611-4169-8504-1e68ad04a40f"
-DEFAULT_RESOURCE_GROUP = "e2e-fraud-detection"
-DEFAULT_WORKSPACE_NAME = "e2e-fraud-detection-ws"
+DEFAULT_SUBSCRIPTION_ID = None
+DEFAULT_RESOURCE_GROUP = None
+DEFAULT_WORKSPACE_NAME = None
 DEFAULT_LOCATION = "eastasia"
 # TODO: Define default budget limits and tag names.
 DEFAULT_COST_CENTER_TAG_KEY = "cost_center"
@@ -34,15 +34,12 @@ class Settings(BaseSettings):
 
     # Azure (defaults in code; can be overridden by env vars)
     subscription_id: str = Field(
-        default=DEFAULT_SUBSCRIPTION_ID,
         validation_alias=AliasChoices("SUBSCRIPTION_ID", "AZURE_SUBSCRIPTION_ID"),
     )
     resource_group: str = Field(
-        default=DEFAULT_RESOURCE_GROUP,
         validation_alias=AliasChoices("RESOURCE_GROUP", "AZURE_RESOURCE_GROUP"),
     )
     workspace_name: str = Field(
-        default=DEFAULT_WORKSPACE_NAME,
         validation_alias=AliasChoices("WORKSPACE_NAME", "AZURE_WORKSPACE_NAME"),
     )
     location: str = Field(

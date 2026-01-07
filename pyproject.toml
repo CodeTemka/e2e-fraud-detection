@@ -21,6 +21,7 @@ dependencies = [
   "typer>=0.20.0",
   "mltable>=1.5.0",
   "azureml-mlflow>=1.60.0",
+  "evidently>=0.4.0",
 ]
 
 [project.optional-dependencies]
