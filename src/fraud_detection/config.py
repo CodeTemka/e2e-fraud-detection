@@ -168,7 +168,7 @@ class Settings(BaseSettings):
                 tags[key] = value
         return tags
 
-    def require_github(self) -> "Settings":
+    def require_github(self) -> Settings:
         missing = [
             name
             for name, value in {
