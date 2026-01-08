@@ -1,37 +1,36 @@
 [project]
 name = "e2e-fraud-detection"
-version = "0.1.0"
+version = "1.0.0"
 description = "End-to-end fraud detection workflows powered by Azure ML"
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.12,<3.13"
 authors = [{ name = "Temuulen Tuvshinjargal", email = "codetemuulen@gmail.com" }]
 
 dependencies = [
-  "azure-ai-ml>=1.30.0",
-  "azure-identity>=1.25.1",
-  "kaggle>=1.8.2",
-  "mlflow>=3.7.0",
-  "pandas>=2.3.3",
-  "pynacl>=1.6.1",
-  "requests>=2.32.5",
-  "scikit-learn>=1.8.0",
-  "lightgbm>=4.6.0",
-  "pydantic>=2.12.5",
-  "pydantic-settings>=2.12.0",
-  "typer>=0.20.0",
-  "mltable>=1.5.0",
-  "azureml-mlflow>=1.60.0",
-  "evidently>=0.4.0",
+  "azure-ai-ml==1.30.0",
+  "azure-identity==1.17.0",
+  "mlflow==3.7.0",
+  "pandas==2.3.3",
+  "pynacl==1.6.1",
+  "requests==2.32.5",
+  "scikit-learn==1.8.0",
+  "lightgbm==4.6.0",
+  "pydantic==2.12.5",
+  "pydantic-settings==2.12.0",
+  "typer==0.20.0",
+  "mltable==1.6.3",
+  "azureml-mlflow==1.60.0",
+  "evidently==0.7.19",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "black>=24.10.0",
-  "isort>=5.13.0",
-  "pip-audit>=2.7.0",
-  "ruff>=0.7.0",
-  "pytest>=8.3.0",
-  "pytest-mock>=3.14.0",
+  "black==24.10.0",
+  "isort==5.13.0",
+  "pip-audit==2.7.0",
+  "ruff==0.7.0",
+  "pytest==8.3.0",
+  "pytest-mock==3.14.0",
 ]
 
 [project.urls]
@@ -40,7 +39,6 @@ Repository = "https://github.com/CodeTemka/e2e-fraud-detection"
 [project.scripts]
 fraud-cli = "fraud_detection.cli:run"
 
-# Tell setuptools that packages live under ./src
 [tool.setuptools]
 package-dir = {"" = "src"}
 
@@ -49,13 +47,12 @@ where = ["src"]
 include = ["fraud_detection*"]
 
 [build-system]
-requires = ["setuptools>=65", "wheel"]
+requires = ["setuptools==80", "wheel"]
 build-backend = "setuptools.build_meta"
-
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 extend-exclude = ["data", "notebooks"]
 
 [tool.ruff.lint]
@@ -64,13 +61,13 @@ ignore = ["E501"]
 
 [tool.black]
 line-length = 100
-target-version = ["py311"]
+target-version = ["py312"]
 
 [tool.isort]
 profile = "black"
 line_length = 100
 
-[tool.pytest.ini_options] 
+[tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [

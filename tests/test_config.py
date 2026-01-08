@@ -39,8 +39,8 @@ def test_settings_raises_on_missing_azure_env(monkeypatch):
     config.get_settings.cache_clear()
     
     # Needs pytest.raises(ValidationError) but we need to import ValidationError
-    from pydantic import ValidationError
     import pytest
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError) as excinfo:
         config.get_settings()
