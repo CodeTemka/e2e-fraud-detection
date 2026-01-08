@@ -73,8 +73,10 @@ def create_automl_job(config: AutoMLJobConfig) -> Any:
     else:
         logger.info("Preflight data validation skipped", extra={"dataset": config.training_data})
 
-    settings = get_settings()
-    compute_target = (config.compute or "").strip() or settings.get_training_compute()
+    compute_target = (config.compute or "").strip()
+    if not compute_target:
+        settings = get_settings()
+        compute_target = settings.get_training_compute()
     logger.info("Preparing AutoML job", extra={"experiment": config.experiment_name})
 
     data_input = Input(type=AssetTypes.MLTABLE, path=config.training_data)
@@ -115,7 +117,7 @@ def create_automl_job(config: AutoMLJobConfig) -> Any:
 def submit_job(ml_client: MLClient, job: Any) -> str:
     """Submit a job and return the created job name."""
     job_name = getattr(job, "name", None)
-    if job_name:
+    if job_name and hasattr(ml_client.jobs, "get"):
         try:
             existing = ml_client.jobs.get(job_name)
         except ResourceNotFoundError:

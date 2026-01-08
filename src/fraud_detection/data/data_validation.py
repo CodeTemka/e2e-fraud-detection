@@ -5,8 +5,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from evidently.calculations.data_drift import get_one_column_drift
-from evidently.options import DataDriftOptions
 from pandas.api import types as ptypes
 
 REQUIRED_COLUMNS: tuple[str, ...] = (
@@ -172,6 +170,9 @@ def compute_drift_metrics(
     bins: int = 10,
 ) -> dict[str, float]:
     """Compute drift metrics between reference and current datasets using Evidently."""
+    from evidently.calculations.data_drift import get_one_column_drift
+    from evidently.options import DataDriftOptions
+
     metrics: dict[str, float] = {}
     shared_columns = [
         col
